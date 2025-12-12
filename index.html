@@ -38,6 +38,16 @@
             color: #718096;
             font-size: 1.1rem;
         }
+        .deadline-banner {
+            display: inline-block;
+            background: linear-gradient(90deg, #e53e3e, #c53030);
+            color: #fff;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 1rem;
+            margin-top: 15px;
+        }
         .stats-summary {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -230,6 +240,7 @@
         <header>
             <h1>대학교 단체 쿠폰 사용 현황</h1>
             <p>Moonlight 대학교별 쿠폰 사용 현황 대시보드</p>
+            <div class="deadline-banner">쿠폰 사용 마감일: 2026년 1월 10일 (<span id="daysLeft"></span>)</div>
             <p class="last-updated" id="lastUpdated"></p>
         </header>
 
@@ -437,7 +448,7 @@
 
                 <div class="charts-container">
                     <div class="chart-card">
-                        <h2>A/B 그룹 사용률 현황</h2>
+                        <h2>50명 달성 사용률 현황</h2>
                         <canvas id="topUsageChart"></canvas>
                     </div>
                 </div>
@@ -591,6 +602,25 @@
             `;
             document.head.appendChild(style);
         });
+
+        // Calculate days left until deadline
+        function updateDaysLeft() {
+            const deadline = new Date('2026-01-10T23:59:59');
+            const now = new Date();
+            const diff = deadline - now;
+            const daysLeft = Math.ceil(diff / (1000 * 60 * 60 * 24));
+            const daysLeftEl = document.getElementById('daysLeft');
+            if (daysLeftEl) {
+                if (daysLeft > 0) {
+                    daysLeftEl.textContent = `D-${daysLeft}`;
+                } else if (daysLeft === 0) {
+                    daysLeftEl.textContent = 'D-Day';
+                } else {
+                    daysLeftEl.textContent = '마감됨';
+                }
+            }
+        }
+        updateDaysLeft();
 
         // Initial load
         fetchData();
