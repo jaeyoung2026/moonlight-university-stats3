@@ -13,9 +13,9 @@
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
             min-height: 100vh;
-            color: #fff;
+            color: #2d3748;
             padding: 20px;
         }
         .container {
@@ -35,7 +35,7 @@
             background-clip: text;
         }
         header p {
-            color: #a0aec0;
+            color: #718096;
             font-size: 1.1rem;
         }
         .stats-summary {
@@ -45,16 +45,16 @@
             margin-bottom: 30px;
         }
         .stat-card {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
+            background: #fff;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
             border-radius: 15px;
             padding: 20px;
             text-align: center;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid #e2e8f0;
         }
         .stat-card h3 {
             font-size: 0.9rem;
-            color: #a0aec0;
+            color: #718096;
             margin-bottom: 10px;
         }
         .stat-card .value {
@@ -66,29 +66,29 @@
             margin-bottom: 30px;
         }
         .chart-card {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(10px);
+            background: #fff;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
             border-radius: 15px;
             padding: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid #e2e8f0;
         }
         .chart-card h2 {
             font-size: 1.2rem;
             margin-bottom: 15px;
-            color: #e2e8f0;
+            color: #2d3748;
         }
         .table-container {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(10px);
+            background: #fff;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
             border-radius: 15px;
             padding: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid #e2e8f0;
             overflow-x: auto;
         }
         .table-container h2 {
             font-size: 1.2rem;
             margin-bottom: 15px;
-            color: #e2e8f0;
+            color: #2d3748;
         }
         .search-box {
             margin-bottom: 15px;
@@ -97,10 +97,10 @@
             width: 100%;
             max-width: 400px;
             padding: 10px 15px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            border: 1px solid #e2e8f0;
             border-radius: 8px;
-            background: rgba(255, 255, 255, 0.1);
-            color: #fff;
+            background: #f7fafc;
+            color: #2d3748;
             font-size: 1rem;
         }
         .search-box input::placeholder {
@@ -113,16 +113,17 @@
         th, td {
             padding: 12px 15px;
             text-align: left;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 1px solid #e2e8f0;
         }
         th {
-            background: rgba(102, 126, 234, 0.3);
+            background: #f7fafc;
             font-weight: 600;
             cursor: pointer;
             user-select: none;
+            color: #4a5568;
         }
         th:hover {
-            background: rgba(102, 126, 234, 0.5);
+            background: #edf2f7;
         }
         th .sort-icon {
             margin-left: 5px;
@@ -132,12 +133,12 @@
             opacity: 1;
         }
         tr:hover {
-            background: rgba(255, 255, 255, 0.05);
+            background: #f7fafc;
         }
         .progress-bar {
             width: 100%;
             height: 8px;
-            background: rgba(255, 255, 255, 0.1);
+            background: #e2e8f0;
             border-radius: 4px;
             overflow: hidden;
         }
@@ -165,9 +166,9 @@
             flex-wrap: wrap;
             margin-bottom: 20px;
             padding: 15px;
-            background: rgba(255, 255, 255, 0.05);
+            background: #f7fafc;
             border-radius: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid #e2e8f0;
         }
         .group-legend-item {
             display: flex;
@@ -176,21 +177,21 @@
         }
         .group-legend-item .discount-info {
             font-size: 0.9rem;
-            color: #a0aec0;
+            color: #718096;
         }
         .group-legend-item .discount-info strong {
-            color: #e2e8f0;
+            color: #2d3748;
         }
         .loading {
             text-align: center;
             padding: 50px;
             font-size: 1.2rem;
-            color: #a0aec0;
+            color: #718096;
         }
         .loading .spinner {
             width: 50px;
             height: 50px;
-            border: 4px solid rgba(102, 126, 234, 0.3);
+            border: 4px solid #e2e8f0;
             border-top-color: #667eea;
             border-radius: 50%;
             animation: spin 1s linear infinite;
@@ -202,7 +203,7 @@
         .error {
             text-align: center;
             padding: 50px;
-            color: #f56565;
+            color: #e53e3e;
         }
         .refresh-btn {
             background: linear-gradient(90deg, #667eea, #764ba2);
@@ -218,7 +219,7 @@
             opacity: 0.9;
         }
         .last-updated {
-            color: #a0aec0;
+            color: #718096;
             font-size: 0.9rem;
             margin-top: 10px;
         }
@@ -569,12 +570,12 @@
                     scales: {
                         x: {
                             max: 100,
-                            grid: { color: 'rgba(255,255,255,0.1)' },
-                            ticks: { color: '#a0aec0' }
+                            grid: { color: '#e2e8f0' },
+                            ticks: { color: '#4a5568' }
                         },
                         y: {
                             grid: { display: false },
-                            ticks: { color: '#a0aec0' }
+                            ticks: { color: '#4a5568' }
                         }
                     }
                 }
