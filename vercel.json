@@ -1,5 +1,6 @@
 {
   "rewrites": [
-    { "source": "/api/coupon-batch", "destination": "/api/coupon-batch" }
+    { "source": "/api/coupon-batch", "destination": "/api/coupon-batch" },
+    { "source": "/api/organization/coupon-batch-used", "destination": "/api/coupon-batch-used" }
   ]
 }
