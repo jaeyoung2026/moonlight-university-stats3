@@ -5,216 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>대학교 단체 쿠폰 사용 현황 - Moonlight</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+    <link rel="stylesheet" href="common.css">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
-            min-height: 100vh;
-            color: #2d3748;
-            padding: 20px;
-        }
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-        header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
+        /* Theme: Purple */
         header h1 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
             background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
-        header p {
-            color: #718096;
-            font-size: 1.1rem;
-        }
-        .deadline-banner {
-            display: inline-block;
-            background: linear-gradient(90deg, #e53e3e, #c53030);
+        .stat-value { color: #667eea; }
+        .stats-section:first-child {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: #fff;
-            padding: 8px 20px;
-            border-radius: 20px;
-            font-weight: 600;
-            font-size: 1rem;
-            margin-top: 15px;
         }
-        .stats-summary {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        .stat-card {
-            background: #fff;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
-            border-radius: 15px;
-            padding: 20px;
-            text-align: center;
-            border: 1px solid #e2e8f0;
-        }
-        .stat-card h3 {
-            font-size: 0.9rem;
-            color: #718096;
-            margin-bottom: 10px;
-        }
-        .stat-card .value {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #667eea;
-        }
-        .charts-container {
-            margin-bottom: 30px;
-        }
-        .chart-card {
-            background: #fff;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
-            border-radius: 15px;
-            padding: 20px;
-            border: 1px solid #e2e8f0;
-        }
-        .chart-card h2 {
-            font-size: 1.2rem;
-            margin-bottom: 15px;
-            color: #2d3748;
-        }
-        .table-container {
-            background: #fff;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
-            border-radius: 15px;
-            padding: 20px;
-            border: 1px solid #e2e8f0;
-            overflow-x: auto;
-        }
-        .table-container h2 {
-            font-size: 1.2rem;
-            margin-bottom: 15px;
-            color: #2d3748;
-        }
-        .search-box {
-            margin-bottom: 15px;
-        }
-        .search-box input {
-            width: 100%;
-            max-width: 400px;
-            padding: 10px 15px;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            background: #f7fafc;
-            color: #2d3748;
-            font-size: 1rem;
-        }
-        .search-box input::placeholder {
-            color: #a0aec0;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            padding: 12px 15px;
-            text-align: left;
-            border-bottom: 1px solid #e2e8f0;
-        }
-        th {
-            background: #f7fafc;
-            font-weight: 600;
-            cursor: pointer;
-            user-select: none;
-            color: #4a5568;
-        }
-        th:hover {
-            background: #edf2f7;
-        }
-        th .sort-icon {
-            margin-left: 5px;
-            opacity: 0.5;
-        }
-        th.sorted .sort-icon {
-            opacity: 1;
-        }
-        tr:hover {
-            background: #f7fafc;
-        }
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background: #e2e8f0;
-            border-radius: 4px;
-            overflow: hidden;
-        }
-        .progress-bar .fill {
-            height: 100%;
-            border-radius: 4px;
-            transition: width 0.3s ease;
-        }
-        .usage-high { background: linear-gradient(90deg, #f56565, #e53e3e); }
-        .usage-medium { background: linear-gradient(90deg, #ed8936, #dd6b20); }
-        .usage-low { background: linear-gradient(90deg, #48bb78, #38a169); }
-        .group-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-weight: 600;
-            font-size: 0.85rem;
-        }
-        .group-a { background: linear-gradient(90deg, #ffd700, #ffb300); color: #1a1a2e; }
-        .group-b { background: linear-gradient(90deg, #c0c0c0, #a0a0a0); color: #1a1a2e; }
-        .group-c { background: linear-gradient(90deg, #cd7f32, #b87333); color: #fff; }
-        .group-legend {
-            display: flex;
-            gap: 20px;
-            flex-wrap: wrap;
-            margin-bottom: 20px;
-            padding: 15px;
-            background: #f7fafc;
-            border-radius: 10px;
-            border: 1px solid #e2e8f0;
-        }
-        .group-legend-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .group-legend-item .discount-info {
-            font-size: 0.9rem;
-            color: #718096;
-        }
-        .group-legend-item .discount-info strong {
-            color: #2d3748;
-        }
-        .loading {
-            text-align: center;
-            padding: 50px;
-            font-size: 1.2rem;
-            color: #718096;
-        }
-        .loading .spinner {
-            width: 50px;
-            height: 50px;
-            border: 4px solid #e2e8f0;
-            border-top-color: #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        .error {
-            text-align: center;
-            padding: 50px;
-            color: #e53e3e;
-        }
+        .stats-section:first-child .section-title { color: rgba(255,255,255,0.9); }
+        .stats-section:first-child .stat-label { color: rgba(255,255,255,0.8); }
+        .stats-section:first-child .stat-value { color: #fff; }
+        .loading .spinner { border-top-color: #667eea; }
         .refresh-btn {
             background: linear-gradient(90deg, #667eea, #764ba2);
             border: none;
@@ -225,22 +34,30 @@
             cursor: pointer;
             margin-left: 10px;
         }
-        .refresh-btn:hover {
-            opacity: 0.9;
+        .refresh-btn:hover { opacity: 0.9; }
+        .tab-btn {
+            border: 2px solid #667eea;
+            color: #667eea;
         }
-        .last-updated {
-            color: #718096;
-            font-size: 0.9rem;
-            margin-top: 10px;
+        .tab-btn:hover { background: #f0f4ff; }
+        .tab-btn.active {
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            color: #fff;
+            border-color: #667eea;
         }
     </style>
+    <script src="cache.js"></script>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>대학교 단체 쿠폰 사용 현황</h1>
-            <p>Moonlight 대학교별 쿠폰 사용 현황 대시보드</p>
+            <h1>Moonlight 쿠폰 사용 현황</h1>
+            <p>대학교별 쿠폰 사용 현황 대시보드</p>
             <div class="deadline-banner">쿠폰 사용 마감일: 2026년 1월 10일 (<span id="daysLeft"></span>)</div>
+            <div class="tab-nav">
+                <a href="index.html" class="tab-btn active">대학교 단체 쿠폰</a>
+                <a href="personal.html" class="tab-btn">개인 쿠폰</a>
+            </div>
             <p class="last-updated" id="lastUpdated"></p>
         </header>
 
@@ -357,37 +174,111 @@
         let allData = [];
         let sortColumn = 'usagePercent';
         let sortDirection = 'desc';
+        let personalStats = { total: 0, used: 0 };
 
-        async function fetchData() {
+        // 개인 쿠폰 CSV 파일 목록
+        const csvFiles = [
+            { file: 'couponA.csv', group: 'A' },
+            { file: 'couponB.csv', group: 'B' },
+            { file: 'couponC.csv', group: 'C' }
+        ];
+
+        async function fetchPersonalStats(forceRefresh = false) {
+            // 캐시 확인
+            if (!forceRefresh) {
+                const cached = getCache(CacheKeys.PERSONAL_STATS);
+                if (cached) {
+                    personalStats = cached.data;
+                    return;
+                }
+            }
+
+            let totalCoupons = 0;
+            let couponsKeys = [];
+
+            for (const csvInfo of csvFiles) {
+                try {
+                    const response = await fetch(csvInfo.file);
+                    if (!response.ok) continue;
+                    const text = await response.text();
+                    const lines = text.split('\n').slice(1);
+                    lines.forEach(line => {
+                        const parts = line.split(',');
+                        if (parts.length >= 3) {
+                            const key = parts[2].trim();
+                            if (key) {
+                                totalCoupons++;
+                                couponsKeys.push(key);
+                            }
+                        }
+                    });
+                } catch (error) {
+                    console.error(`Failed to load ${csvInfo.file}:`, error);
+                }
+            }
+
+            // 사용된 쿠폰 키 가져오기
+            try {
+                const response = await fetch('/api/organization/coupon-batch-used', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: '대학제휴' })
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    const usedKeys = new Set(Array.isArray(data) ? data : (data.keys || []));
+                    const usedCount = couponsKeys.filter(key => usedKeys.has(key)).length;
+                    personalStats = { total: totalCoupons, used: usedCount };
+                    setCache(CacheKeys.PERSONAL_STATS, personalStats);
+                }
+            } catch (error) {
+                console.error('Failed to fetch personal used keys:', error);
+            }
+        }
+
+        async function fetchData(forceRefresh = false) {
             const keys = Object.values(universities).map(u => u.key);
 
+            // 캐시 확인
+            if (!forceRefresh) {
+                const cached = getCache(CacheKeys.GROUP_STATS);
+                if (cached) {
+                    await fetchPersonalStats(false);
+                    processData(cached.data, cached.age);
+                    return;
+                }
+            }
+
             try {
-                const response = await fetch('/api/coupon-batch', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ keys })
-                });
+                // 단체 쿠폰과 개인 쿠폰 통계를 병렬로 가져오기
+                const [response] = await Promise.all([
+                    fetch('/api/coupon-batch', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ keys })
+                    }),
+                    fetchPersonalStats(forceRefresh)
+                ]);
 
                 if (!response.ok) {
                     throw new Error('API 요청 실패');
                 }
 
                 const data = await response.json();
-                processData(data);
+                setCache(CacheKeys.GROUP_STATS, data);
+                processData(data, 0);
             } catch (error) {
                 document.getElementById('content').innerHTML = `
                     <div class="error">
                         <p>데이터를 불러오는 중 오류가 발생했습니다.</p>
                         <p>${error.message}</p>
-                        <button class="refresh-btn" onclick="fetchData()">다시 시도</button>
+                        <button class="refresh-btn" onclick="fetchData(true)">다시 시도</button>
                     </div>
                 `;
             }
         }
 
-        function processData(data) {
+        function processData(data, cacheAge = 0) {
             allData = [];
 
             for (const [name, uniData] of Object.entries(universities)) {
@@ -411,8 +302,11 @@
             }
 
             renderDashboard();
+
+            // 캐시 상태 표시
+            const cacheInfo = cacheAge > 0 ? ` (캐시: ${Math.floor(cacheAge / 1000)}초 전)` : '';
             document.getElementById('lastUpdated').textContent =
-                `마지막 업데이트: ${new Date().toLocaleString('ko-KR')}`;
+                `마지막 업데이트: ${new Date().toLocaleString('ko-KR')}${cacheInfo}`;
         }
 
         function renderDashboard() {
@@ -422,39 +316,76 @@
             const totalUsed = allData.reduce((sum, d) => sum + d.used, 0);
             const avgUsage = totalCoupons > 0 ? (totalUsed / totalCoupons) * 100 : 0;
 
+            // 전체 통계 (단체 + 개인)
+            const grandTotalCoupons = totalCoupons + personalStats.total;
+            const grandTotalUsed = totalUsed + personalStats.used;
+            const grandAvgUsage = grandTotalCoupons > 0 ? (grandTotalUsed / grandTotalCoupons) * 100 : 0;
+            const personalUsageRate = personalStats.total > 0 ? (personalStats.used / personalStats.total) * 100 : 0;
+
             const html = `
-                <div class="stats-summary">
-                    <div class="stat-card">
-                        <h3>총 대학교 수</h3>
-                        <div class="value">${totalUniversities}</div>
+                <div class="stats-sections">
+                    <div class="stats-section">
+                        <h3 class="section-title">전체 통계</h3>
+                        <div class="stats-row">
+                            <div class="stat-item">
+                                <span class="stat-label">총 쿠폰</span>
+                                <span class="stat-value">${grandTotalCoupons.toLocaleString()}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">사용</span>
+                                <span class="stat-value">${grandTotalUsed.toLocaleString()}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">사용률</span>
+                                <span class="stat-value highlight">${grandAvgUsage.toFixed(1)}%</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="stat-card">
-                        <h3>총 신청자 수</h3>
-                        <div class="value">${totalApplicants.toLocaleString()}</div>
+                    <div class="stats-section">
+                        <h3 class="section-title">단체 쿠폰</h3>
+                        <div class="stats-row">
+                            <div class="stat-item">
+                                <span class="stat-label">총 쿠폰</span>
+                                <span class="stat-value">${totalCoupons.toLocaleString()}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">사용</span>
+                                <span class="stat-value">${totalUsed.toLocaleString()}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">사용률</span>
+                                <span class="stat-value">${avgUsage.toFixed(1)}%</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="stat-card">
-                        <h3>총 쿠폰 수</h3>
-                        <div class="value">${totalCoupons.toLocaleString()}</div>
-                    </div>
-                    <div class="stat-card">
-                        <h3>사용된 쿠폰</h3>
-                        <div class="value">${totalUsed.toLocaleString()}</div>
-                    </div>
-                    <div class="stat-card">
-                        <h3>평균 사용률</h3>
-                        <div class="value">${avgUsage.toFixed(1)}%</div>
+                    <div class="stats-section">
+                        <h3 class="section-title">개인 쿠폰</h3>
+                        <div class="stats-row">
+                            <div class="stat-item">
+                                <span class="stat-label">총 쿠폰</span>
+                                <span class="stat-value">${personalStats.total.toLocaleString()}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">사용</span>
+                                <span class="stat-value">${personalStats.used.toLocaleString()}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">사용률</span>
+                                <span class="stat-value">${personalUsageRate.toFixed(1)}%</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
                 <div class="charts-container">
                     <div class="chart-card">
-                        <h2>50명 달성 사용률 현황</h2>
+                        <h2 id="chartTitle">50명 달성 대학교 사용 수 현황</h2>
                         <canvas id="topUsageChart"></canvas>
                     </div>
                 </div>
 
                 <div class="table-container">
-                    <h2>전체 대학교 현황 <button class="refresh-btn" onclick="fetchData()">새로고침</button></h2>
+                    <h2>전체 대학교 현황 <button class="refresh-btn" onclick="fetchData(true)">새로고침</button></h2>
                     <div class="group-legend">
                         <div class="group-legend-item">
                             <span class="group-badge group-a">A</span>
@@ -550,33 +481,48 @@
         }
 
         function renderCharts() {
-            // Top 20 Usage Chart (A, B 그룹만)
+            // Top 20 Usage Chart (A, B 그룹만) - 사용 수 기준 정렬
             const topData = [...allData]
                 .filter(d => d.group === 'A' || d.group === 'B')
-                .sort((a, b) => b.usagePercent - a.usagePercent)
+                .sort((a, b) => b.used - a.used)
                 .slice(0, 20);
+
+            // 차트 타이틀에 총량 표시
+            const chartTotalUsed = topData.reduce((sum, d) => sum + d.used, 0);
+            const chartTotalCoupons = topData.reduce((sum, d) => sum + d.total, 0);
+            document.getElementById('chartTitle').textContent =
+                `50명 달성 대학교 사용 수 현황 (${chartTotalUsed.toLocaleString()} / ${chartTotalCoupons.toLocaleString()})`;
 
             new Chart(document.getElementById('topUsageChart'), {
                 type: 'bar',
                 data: {
                     labels: topData.map(d => d.name),
                     datasets: [{
-                        label: '사용률 (%)',
-                        data: topData.map(d => d.usagePercent),
+                        label: '사용 수',
+                        data: topData.map(d => d.used),
                         backgroundColor: topData.map(d => {
                             if (d.usagePercent >= 70) return 'rgba(245, 101, 101, 0.8)';
                             if (d.usagePercent >= 40) return 'rgba(237, 137, 54, 0.8)';
                             return 'rgba(72, 187, 120, 0.8)';
                         }),
-                        borderRadius: 4
+                        borderRadius: 4,
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'end',
+                            formatter: (value) => value.toLocaleString(),
+                            color: '#4a5568',
+                            font: { weight: 'bold', size: 11 }
+                        }
                     }]
                 },
+                plugins: [ChartDataLabels],
                 options: {
                     indexAxis: 'y',
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { display: false }
+                        legend: { display: false },
+                        datalabels: { display: true }
                     },
                     scales: {
                         x: {

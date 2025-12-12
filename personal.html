@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>개인 쿠폰 사용 현황 - Moonlight</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="common.css">
+    <style>
+        /* Theme: Green */
+        header h1 {
+            background: linear-gradient(90deg, #48bb78 0%, #38a169 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .stat-value { color: #48bb78; }
+        .stats-section:first-child {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            color: #fff;
+        }
+        .stats-section:first-child .section-title { color: rgba(255,255,255,0.9); }
+        .stats-section:first-child .stat-label { color: rgba(255,255,255,0.8); }
+        .stats-section:first-child .stat-value { color: #fff; }
+        .loading .spinner { border-top-color: #48bb78; }
+        .refresh-btn {
+            background: linear-gradient(90deg, #48bb78, #38a169);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        .refresh-btn:hover { opacity: 0.9; }
+        .tab-btn {
+            border: 2px solid #48bb78;
+            color: #48bb78;
+        }
+        .tab-btn:hover { background: #f0fff4; }
+        .tab-btn.active {
+            background: linear-gradient(90deg, #48bb78, #38a169);
+            color: #fff;
+            border-color: #48bb78;
+        }
+    </style>
+    <script src="cache.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Moonlight 쿠폰 사용 현황</h1>
+            <p>개인 1회용 쿠폰 사용 현황 대시보드</p>
+            <div class="deadline-banner">쿠폰 사용 마감일: 2026년 1월 10일 (<span id="daysLeft"></span>)</div>
+            <div class="tab-nav">
+                <a href="index.html" class="tab-btn">대학교 단체 쿠폰</a>
+                <a href="personal.html" class="tab-btn active">개인 쿠폰</a>
+            </div>
+            <p class="last-updated" id="lastUpdated"></p>
+        </header>
+
+        <div id="content">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>데이터를 불러오는 중...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // CSV 파일 목록과 그룹 정보
+        const csvFiles = [
+            { file: 'couponA.csv', group: 'A', discount: '40%' },
+            { file: 'couponB.csv', group: 'B', discount: '30%' },
+            { file: 'couponC.csv', group: 'C', discount: '15%' }
+        ];
+
+        let coupons = [];
+        let allData = [];
+        let sortColumn = 'index';
+        let sortDirection = 'asc';
+        let uniSortColumn = 'total';
+        let uniSortDirection = 'desc';
+        let groupStats = { total: 0, used: 0 };
+
+        // 단체 쿠폰 통계 가져오기
+        async function fetchGroupStats(forceRefresh = false) {
+            // 캐시 확인
+            if (!forceRefresh) {
+                const cached = getCache(CacheKeys.GROUP_STATS);
+                if (cached) {
+                    // GROUP_STATS에서 단체 쿠폰 통계 계산
+                    const data = cached.data;
+                    let total = 0, used = 0;
+                    for (const key in data) {
+                        if (data[key] && data[key].coupon_count_total) {
+                            total += data[key].coupon_count_total;
+                            used += data[key].coupon_count_total - data[key].coupon_count;
+                        }
+                    }
+                    groupStats = { total, used };
+                    return;
+                }
+            }
+
+            try {
+                const response = await fetch('/api/coupon-batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: '대학제휴' })
+                });
+                if (!response.ok) return;
+                const data = await response.json();
+                if (data && data.couponBatchList) {
+                    let total = 0, used = 0;
+                    data.couponBatchList.forEach(batch => {
+                        total += batch.count || 0;
+                        used += batch.usedCount || 0;
+                    });
+                    groupStats = { total, used };
+                }
+            } catch (error) {
+                console.error('Failed to fetch group stats:', error);
+            }
+        }
+
+        // CSV 파일들을 로드하여 쿠폰 목록 생성
+        async function loadCouponsFromCSV() {
+            coupons = [];
+
+            for (const csvInfo of csvFiles) {
+                try {
+                    const response = await fetch(csvInfo.file);
+                    if (!response.ok) continue;
+
+                    const text = await response.text();
+                    const lines = text.split('\n').slice(1); // 헤더 제외
+
+                    lines.forEach(line => {
+                        const parts = line.split(',');
+                        if (parts.length >= 3) {
+                            const email = parts[0].trim();
+                            const university = parts[1].trim();
+                            const key = parts[2].trim();
+
+                            if (email && key) {
+                                coupons.push({
+                                    email,
+                                    university,
+                                    key,
+                                    group: csvInfo.group,
+                                    discount: csvInfo.discount
+                                });
+                            }
+                        }
+                    });
+                } catch (error) {
+                    console.error(`Failed to load ${csvInfo.file}:`, error);
+                }
+            }
+
+            return coupons;
+        }
+
+        async function fetchData(forceRefresh = false) {
+            // 캐시 확인
+            if (!forceRefresh) {
+                const cachedPersonal = getCache(CacheKeys.PERSONAL_STATS);
+                const cachedUsedKeys = getCache(CacheKeys.USED_KEYS);
+                const cachedCsv = getCache(CacheKeys.CSV_DATA);
+
+                if (cachedPersonal && cachedUsedKeys && cachedCsv) {
+                    coupons = cachedCsv.data;
+                    await fetchGroupStats(false);
+                    processData(cachedUsedKeys.data, cachedPersonal.age);
+                    return;
+                }
+            }
+
+            try {
+                // 1. CSV 파일에서 쿠폰 목록 로드
+                await loadCouponsFromCSV();
+                setCache(CacheKeys.CSV_DATA, coupons);
+
+                if (coupons.length === 0) {
+                    throw new Error('쿠폰 데이터를 불러올 수 없습니다.');
+                }
+
+                // 2. API에서 사용된 쿠폰 키 목록과 단체 쿠폰 통계 병렬 가져오기
+                const [response] = await Promise.all([
+                    fetch('/api/organization/coupon-batch-used', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: '대학제휴' })
+                    }),
+                    fetchGroupStats(forceRefresh)
+                ]);
+
+                if (!response.ok) {
+                    throw new Error('API 요청 실패');
+                }
+
+                const data = await response.json();
+                setCache(CacheKeys.USED_KEYS, data);
+                processData(data, 0);
+            } catch (error) {
+                document.getElementById('content').innerHTML = `
+                    <div class="error">
+                        <p>데이터를 불러오는 중 오류가 발생했습니다.</p>
+                        <p>${error.message}</p>
+                        <button class="refresh-btn" onclick="fetchData(true)">다시 시도</button>
+                    </div>
+                `;
+            }
+        }
+
+        function processData(data, cacheAge = 0) {
+            allData = [];
+
+            // API에서 받은 사용된 쿠폰 키 리스트 (배열 직접 반환)
+            const usedKeys = new Set(Array.isArray(data) ? data : (data.keys || []));
+
+            coupons.forEach((coupon, index) => {
+                const key = coupon.key;
+                const isUsed = usedKeys.has(key);
+
+                allData.push({
+                    index: index + 1,
+                    email: coupon.email,
+                    university: coupon.university,
+                    key,
+                    group: coupon.group,
+                    discount: coupon.discount,
+                    isUsed
+                });
+            });
+
+            // 개인 쿠폰 통계 캐시
+            const personalTotal = allData.length;
+            const personalUsed = allData.filter(d => d.isUsed).length;
+            setCache(CacheKeys.PERSONAL_STATS, { total: personalTotal, used: personalUsed });
+
+            renderDashboard();
+
+            // 캐시 상태 표시
+            const cacheInfo = cacheAge > 0 ? ` (캐시: ${Math.floor(cacheAge / 1000)}초 전)` : '';
+            document.getElementById('lastUpdated').textContent =
+                `마지막 업데이트: ${new Date().toLocaleString('ko-KR')}${cacheInfo}`;
+        }
+
+        function renderDashboard() {
+            // 개인 쿠폰 통계
+            const personalTotal = allData.length;
+            const personalUsed = allData.filter(d => d.isUsed).length;
+            const personalRate = personalTotal > 0 ? (personalUsed / personalTotal) * 100 : 0;
+
+            // 전체 통계 (단체 + 개인)
+            const grandTotal = groupStats.total + personalTotal;
+            const grandUsed = groupStats.used + personalUsed;
+            const grandRate = grandTotal > 0 ? (grandUsed / grandTotal) * 100 : 0;
+
+            // 단체 쿠폰 사용률
+            const groupRate = groupStats.total > 0 ? (groupStats.used / groupStats.total) * 100 : 0;
+
+            // 그룹별 통계 계산 (A, B, C)
+            const personalGroupStats = {};
+            ['A', 'B', 'C'].forEach(g => {
+                const groupData = allData.filter(d => d.group === g);
+                const used = groupData.filter(d => d.isUsed).length;
+                personalGroupStats[g] = {
+                    total: groupData.length,
+                    used,
+                    unused: groupData.length - used,
+                    rate: groupData.length > 0 ? (used / groupData.length) * 100 : 0
+                };
+            });
+
+            // 대학교별 통계 계산 (그룹 정보 포함)
+            const uniStats = {};
+            allData.forEach(d => {
+                if (!uniStats[d.university]) {
+                    uniStats[d.university] = { total: 0, used: 0, group: d.group, discount: d.discount };
+                }
+                uniStats[d.university].total++;
+                if (d.isUsed) uniStats[d.university].used++;
+            });
+
+            // 대학교별 통계 배열로 변환
+            window.uniStatsData = Object.entries(uniStats)
+                .map(([name, stats]) => ({
+                    name,
+                    total: stats.total,
+                    used: stats.used,
+                    group: stats.group,
+                    discount: stats.discount,
+                    rate: stats.total > 0 ? (stats.used / stats.total) * 100 : 0
+                }));
+
+            // 초기 정렬 적용
+            sortUniStats();
+
+            const html = `
+                <div class="stats-sections">
+                    <div class="stats-section">
+                        <h3 class="section-title">전체 통계</h3>
+                        <div class="stats-row">
+                            <div class="stat-item">
+                                <span class="stat-label">총 쿠폰</span>
+                                <span class="stat-value">${grandTotal.toLocaleString()}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">사용</span>
+                                <span class="stat-value">${grandUsed.toLocaleString()}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">사용률</span>
+                                <span class="stat-value highlight">${grandRate.toFixed(1)}%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="stats-section">
+                        <h3 class="section-title">단체 쿠폰</h3>
+                        <div class="stats-row">
+                            <div class="stat-item">
+                                <span class="stat-label">총 쿠폰</span>
+                                <span class="stat-value">${groupStats.total.toLocaleString()}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">사용</span>
+                                <span class="stat-value">${groupStats.used.toLocaleString()}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">사용률</span>
+                                <span class="stat-value highlight">${groupRate.toFixed(1)}%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="stats-section">
+                        <h3 class="section-title">개인 쿠폰</h3>
+                        <div class="stats-row">
+                            <div class="stat-item">
+                                <span class="stat-label">총 쿠폰</span>
+                                <span class="stat-value">${personalTotal.toLocaleString()}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">사용</span>
+                                <span class="stat-value">${personalUsed.toLocaleString()}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">사용률</span>
+                                <span class="stat-value highlight">${personalRate.toFixed(1)}%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stats-card">
+                        <h2>그룹별 통계</h2>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>그룹</th>
+                                    <th>총</th>
+                                    <th>사용</th>
+                                    <th>미사용</th>
+                                    <th>사용률</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${['A', 'B', 'C'].map(g => {
+                                    const s = personalGroupStats[g];
+                                    const groupClass = g === 'A' ? 'group-a' : g === 'B' ? 'group-b' : 'group-c';
+                                    const usageClass = s.rate >= 70 ? 'usage-high' : s.rate >= 40 ? 'usage-medium' : 'usage-low';
+                                    const discount = g === 'A' ? '40%' : g === 'B' ? '30%' : '15%';
+                                    return `
+                                        <tr>
+                                            <td><span class="group-badge ${groupClass}">${g} (${discount})</span></td>
+                                            <td>${s.total}</td>
+                                            <td>${s.used}</td>
+                                            <td>${s.unused}</td>
+                                            <td>
+                                                <div style="display: flex; align-items: center; gap: 8px;">
+                                                    <div class="progress-bar" style="width: 80px;">
+                                                        <div class="fill ${usageClass}" style="width: ${s.rate}%"></div>
+                                                    </div>
+                                                    <span>${s.rate.toFixed(1)}%</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="stats-card" style="max-height: 500px; overflow-y: auto;">
+                        <h2>대학교별 통계 (${window.uniStatsData.length}개)</h2>
+                        <table id="uniStatsTable">
+                            <thead>
+                                <tr>
+                                    <th onclick="sortUniTable('group')" style="cursor:pointer;">그룹 <span class="sort-icon">↕</span></th>
+                                    <th onclick="sortUniTable('name')" style="cursor:pointer;">대학교 <span class="sort-icon">↕</span></th>
+                                    <th onclick="sortUniTable('total')" style="cursor:pointer;">총 <span class="sort-icon">↕</span></th>
+                                    <th onclick="sortUniTable('used')" style="cursor:pointer;">사용 <span class="sort-icon">↕</span></th>
+                                    <th onclick="sortUniTable('rate')" style="cursor:pointer;">사용률 <span class="sort-icon">↕</span></th>
+                                </tr>
+                            </thead>
+                            <tbody id="uniStatsBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <h2>개인 쿠폰 현황 <button class="refresh-btn" onclick="fetchData(true)">새로고침</button></h2>
+                    <div class="search-box">
+                        <input type="text" id="searchInput" placeholder="이메일 또는 대학교 검색..." oninput="filterTable()">
+                    </div>
+                    <table id="dataTable">
+                        <thead>
+                            <tr>
+                                <th onclick="sortTable('group')">그룹 <span class="sort-icon">↕</span></th>
+                                <th onclick="sortTable('index')"># <span class="sort-icon">↕</span></th>
+                                <th onclick="sortTable('email')">이메일 <span class="sort-icon">↕</span></th>
+                                <th onclick="sortTable('university')">대학교 <span class="sort-icon">↕</span></th>
+                                <th onclick="sortTable('isUsed')">상태 <span class="sort-icon">↕</span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            document.getElementById('content').innerHTML = html;
+            renderUniStatsTable();
+            renderTable();
+        }
+
+        function sortUniStats() {
+            if (!window.uniStatsData) return;
+            window.uniStatsData.sort((a, b) => {
+                const aVal = a[uniSortColumn];
+                const bVal = b[uniSortColumn];
+                if (typeof aVal === 'string') {
+                    return uniSortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                }
+                return uniSortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+            });
+        }
+
+        function renderUniStatsTable() {
+            const tbody = document.getElementById('uniStatsBody');
+            if (!tbody || !window.uniStatsData) return;
+
+            tbody.innerHTML = window.uniStatsData.map(u => {
+                const usageClass = u.rate >= 70 ? 'usage-high' : u.rate >= 40 ? 'usage-medium' : 'usage-low';
+                const groupClass = u.group === 'A' ? 'group-a' : u.group === 'B' ? 'group-b' : 'group-c';
+                return `
+                    <tr>
+                        <td><span class="group-badge ${groupClass}">${u.group} (${u.discount})</span></td>
+                        <td>${u.name}</td>
+                        <td>${u.total}</td>
+                        <td>${u.used}</td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div class="progress-bar" style="width: 80px;">
+                                    <div class="fill ${usageClass}" style="width: ${u.rate}%"></div>
+                                </div>
+                                <span>${u.rate.toFixed(1)}%</span>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function sortUniTable(column) {
+            if (uniSortColumn === column) {
+                uniSortDirection = uniSortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                uniSortColumn = column;
+                uniSortDirection = column === 'name' || column === 'group' ? 'asc' : 'desc';
+            }
+            sortUniStats();
+            renderUniStatsTable();
+        }
+
+        function renderTable(filteredData = null) {
+            const data = filteredData || [...allData];
+
+            data.sort((a, b) => {
+                const aVal = a[sortColumn];
+                const bVal = b[sortColumn];
+                if (typeof aVal === 'string') {
+                    return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                }
+                if (typeof aVal === 'boolean') {
+                    return sortDirection === 'asc' ? (aVal === bVal ? 0 : aVal ? 1 : -1) : (aVal === bVal ? 0 : aVal ? -1 : 1);
+                }
+                return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+            });
+
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = data.map(d => {
+                const statusClass = d.isUsed ? 'status-used' : 'status-unused';
+                const statusText = d.isUsed ? '사용됨' : '미사용';
+                const groupClass = d.group === 'A' ? 'group-a' : d.group === 'B' ? 'group-b' : 'group-c';
+                return `
+                    <tr>
+                        <td><span class="group-badge ${groupClass}">${d.group} (${d.discount})</span></td>
+                        <td>${d.index}</td>
+                        <td>${d.email}</td>
+                        <td>${d.university}</td>
+                        <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function sortTable(column) {
+            if (sortColumn === column) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = column;
+                sortDirection = 'asc';
+            }
+            filterTable();
+        }
+
+        function filterTable() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const filtered = allData.filter(d =>
+                d.email.toLowerCase().includes(searchTerm) ||
+                d.university.toLowerCase().includes(searchTerm)
+            );
+            renderTable(filtered);
+        }
+
+        // Calculate days left until deadline
+        function updateDaysLeft() {
+            const deadline = new Date('2026-01-10T23:59:59');
+            const now = new Date();
+            const diff = deadline - now;
+            const daysLeft = Math.ceil(diff / (1000 * 60 * 60 * 24));
+            const daysLeftEl = document.getElementById('daysLeft');
+            if (daysLeftEl) {
+                if (daysLeft > 0) {
+                    daysLeftEl.textContent = `D-${daysLeft}`;
+                } else if (daysLeft === 0) {
+                    daysLeftEl.textContent = 'D-Day';
+                } else {
+                    daysLeftEl.textContent = '마감됨';
+                }
+            }
+        }
+        updateDaysLeft();
+
+        // Initial load
+        fetchData();
+    </script>
+</body>
+</html>
