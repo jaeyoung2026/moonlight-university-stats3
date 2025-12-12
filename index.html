@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>대학교 쿠폰 현황 - Moonlight</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        header p {
+            color: #a0aec0;
+            font-size: 1.1rem;
+        }
+        .stats-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .stat-card h3 {
+            font-size: 0.9rem;
+            color: #a0aec0;
+            margin-bottom: 10px;
+        }
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .charts-container {
+            margin-bottom: 30px;
+        }
+        .chart-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .chart-card h2 {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            color: #e2e8f0;
+        }
+        .table-container {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            overflow-x: auto;
+        }
+        .table-container h2 {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            color: #e2e8f0;
+        }
+        .search-box {
+            margin-bottom: 15px;
+        }
+        .search-box input {
+            width: 100%;
+            max-width: 400px;
+            padding: 10px 15px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            font-size: 1rem;
+        }
+        .search-box input::placeholder {
+            color: #a0aec0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        th {
+            background: rgba(102, 126, 234, 0.3);
+            font-weight: 600;
+            cursor: pointer;
+            user-select: none;
+        }
+        th:hover {
+            background: rgba(102, 126, 234, 0.5);
+        }
+        th .sort-icon {
+            margin-left: 5px;
+            opacity: 0.5;
+        }
+        th.sorted .sort-icon {
+            opacity: 1;
+        }
+        tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress-bar .fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        .usage-high { background: linear-gradient(90deg, #f56565, #e53e3e); }
+        .usage-medium { background: linear-gradient(90deg, #ed8936, #dd6b20); }
+        .usage-low { background: linear-gradient(90deg, #48bb78, #38a169); }
+        .group-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+        .group-a { background: linear-gradient(90deg, #ffd700, #ffb300); color: #1a1a2e; }
+        .group-b { background: linear-gradient(90deg, #c0c0c0, #a0a0a0); color: #1a1a2e; }
+        .group-c { background: linear-gradient(90deg, #cd7f32, #b87333); color: #fff; }
+        .group-legend {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .group-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .group-legend-item .discount-info {
+            font-size: 0.9rem;
+            color: #a0aec0;
+        }
+        .group-legend-item .discount-info strong {
+            color: #e2e8f0;
+        }
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.2rem;
+            color: #a0aec0;
+        }
+        .loading .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(102, 126, 234, 0.3);
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .error {
+            text-align: center;
+            padding: 50px;
+            color: #f56565;
+        }
+        .refresh-btn {
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        .refresh-btn:hover {
+            opacity: 0.9;
+        }
+        .last-updated {
+            color: #a0aec0;
+            font-size: 0.9rem;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>대학교 쿠폰 현황</h1>
+            <p>Moonlight 대학교별 쿠폰 사용 현황 대시보드</p>
+            <p class="last-updated" id="lastUpdated"></p>
+        </header>
+
+        <div id="content">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>데이터를 불러오는 중...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const universities = {
+            "이화여자대학교": { key: "91PBI6D7", applicants: 407, group: "A" },
+            "서울대학교": { key: "B04UBD2S", applicants: 149, group: "B" },
+            "한양대학교": { key: "UM36B0Z0", applicants: 136, group: "B" },
+            "고려대학교": { key: "NAV5IWFJ", applicants: 127, group: "B" },
+            "중앙대학교": { key: "3FZHOVDR", applicants: 120, group: "B" },
+            "성균관대학교": { key: "MNZT2ZN1", applicants: 118, group: "B" },
+            "성신여자대학교": { key: "ICPYD5IO", applicants: 109, group: "B" },
+            "연세대학교": { key: "0HFUGZP4", applicants: 95, group: "B" },
+            "서울여자대학교": { key: "0T1C1WB0", applicants: 87, group: "B" },
+            "KAIST": { key: "E4FLTD62", applicants: 81, group: "B" },
+            "POSTECH": { key: "9M6OFMEH", applicants: 76, group: "B" },
+            "세종대학교": { key: "P8FUPI25", applicants: 71, group: "B" },
+            "숙명여자대학교": { key: "0UUB4KJP", applicants: 65, group: "B" },
+            "경북대학교": { key: "J8J9BL5W", applicants: 60, group: "B" },
+            "건국대학교": { key: "JZY1K564", applicants: 57, group: "B" },
+            "경희대학교": { key: "SLLFQBP3", applicants: 55, group: "B" },
+            "아주대학교": { key: "93YFSLZ2", applicants: 55, group: "B" },
+            "GIST": { key: "IQKHLMGE", applicants: 53, group: "B" },
+            "인하대학교": { key: "V2M1JC05", applicants: 53, group: "B" },
+            "명지대학교": { key: "0ENFCN61", applicants: 42, group: "C" },
+            "부산대학교": { key: "M7PF7H4X", applicants: 42, group: "C" },
+            "전남대학교": { key: "62VW6GQ4", applicants: 38, group: "C" },
+            "국립공주대학교": { key: "2TJ2IVKT", applicants: 37, group: "C" },
+            "서울과학종합대학원대학교": { key: "D352F7Z3", applicants: 37, group: "C" },
+            "경상국립대학교": { key: "U680UONZ", applicants: 30, group: "C" },
+            "한국항공대학교": { key: "OU9THUQ0", applicants: 29, group: "C" },
+            "서울시립대학교": { key: "ZSKHGN48", applicants: 28, group: "C" },
+            "서울과학기술대학교": { key: "3R762EBB", applicants: 26, group: "C" },
+            "국립부경대학교": { key: "TJ8VM8DR", applicants: 25, group: "C" },
+            "단국대학교": { key: "BS4I79E2", applicants: 24, group: "C" },
+            "UNIST": { key: "R553D6N2", applicants: 21, group: "C" },
+            "서강대학교": { key: "ML35JJWS", applicants: 19, group: "C" },
+            "숭실대학교": { key: "A0VIXNTH", applicants: 19, group: "C" },
+            "가천대학교": { key: "UX12GL4S", applicants: 18, group: "C" },
+            "인천대학교": { key: "XLFOTGXA", applicants: 17, group: "C" },
+            "충남대학교": { key: "S1M23NVB", applicants: 17, group: "C" },
+            "조선대학교": { key: "9AQ1A0Y6", applicants: 16, group: "C" },
+            "가톨릭대학교": { key: "UAKZNHJ5", applicants: 15, group: "C" },
+            "강원대학교": { key: "U7EMPSWV", applicants: 15, group: "C" },
+            "전북대학교": { key: "788PW5CZ", applicants: 15, group: "C" },
+            "차의과학대학교": { key: "JN9ZZSN4", applicants: 15, group: "C" },
+            "충북대학교": { key: "KLFTCD8N", applicants: 12, group: "C" },
+            "국민대학교": { key: "YDNHJYHT", applicants: 11, group: "C" },
+            "홍익대학교": { key: "V4EGADET", applicants: 10, group: "C" },
+            "국립금오공과대학교": { key: "917XY1FQ", applicants: 9, group: "C" },
+            "영남대학교": { key: "JEEFB4Z9", applicants: 8, group: "C" },
+            "계명대학교": { key: "RL4G3ALF", applicants: 7, group: "C" },
+            "동국대학교": { key: "32GQSRAR", applicants: 7, group: "C" },
+            "한국공학대학교": { key: "VV792AHB", applicants: 7, group: "C" },
+            "덕성여자대학교": { key: "LURJ9YQQ", applicants: 6, group: "C" },
+            "한경국립대학교": { key: "INO3CTN1", applicants: 6, group: "C" },
+            "경기대학교": { key: "VAC5R3W1", applicants: 5, group: "C" },
+            "광운대학교": { key: "HZN5EAGO", applicants: 5, group: "C" },
+            "동아대학교": { key: "M2O60TVW", applicants: 5, group: "C" },
+            "창원대학교": { key: "0RZ9H9ZT", applicants: 5, group: "C" },
+            "한국외국어대학교": { key: "M5XJX98L", applicants: 5, group: "C" },
+            "상명대학교": { key: "GLGEBKIU", applicants: 4, group: "C" },
+            "선문대학교": { key: "JPM3QZ47", applicants: 4, group: "C" },
+            "제주대학교": { key: "BDS7GEXO", applicants: 4, group: "C" },
+            "DGIST": { key: "00W2VHQ7", applicants: 3, group: "C" },
+            "경성대학교": { key: "KGT5QY3J", applicants: 3, group: "C" },
+            "대구대": { key: "SO4GK06L", applicants: 3, group: "C" },
+            "울산대학교": { key: "4H5A0T69", applicants: 3, group: "C" },
+            "한국기술교육대학교": { key: "M0XBNC48", applicants: 3, group: "C" },
+            "KENTECH": { key: "V8Z5H17M", applicants: 2, group: "C" },
+            "강릉원주대학교": { key: "5Z7GHGRZ", applicants: 2, group: "C" },
+            "국립한밭대학교": { key: "7ZQ3HSML", applicants: 2, group: "C" },
+            "군산대학교": { key: "105MHHID", applicants: 2, group: "C" },
+            "대구가톨릭대학교": { key: "IABAO6BI", applicants: 2, group: "C" },
+            "목포대학교": { key: "LCU374PT", applicants: 2, group: "C" },
+            "전주대학교": { key: "1MHUGDWQ", applicants: 2, group: "C" },
+            "한국교원대학교": { key: "LRSRAK50", applicants: 2, group: "C" },
+            "한국교통대학교": { key: "Q41QZP9R", applicants: 2, group: "C" },
+            "한국방송통신대학교": { key: "2JJJ4S2F", applicants: 2, group: "C" },
+            "한국해양대학교": { key: "40K800ZM", applicants: 2, group: "C" },
+            "한동대학교": { key: "GZEGPKOH", applicants: 2, group: "C" },
+            "한신대": { key: "8DIGIJ2T", applicants: 2, group: "C" },
+            "가톨릭관동대학교": { key: "EIG3T3VL", applicants: 1, group: "C" },
+            "강남대학교": { key: "7UPWETAK", applicants: 1, group: "C" },
+            "경남대학교": { key: "T7FV5N1F", applicants: 1, group: "C" },
+            "경희사이버대학교": { key: "ATTWIF85", applicants: 1, group: "C" },
+            "국제뇌교육종합대학원대학교": { key: "DTI65IMJ", applicants: 1, group: "C" },
+            "대전대학교": { key: "8Y55RFY7", applicants: 1, group: "C" },
+            "동덕여자대학교": { key: "NIAMHU96", applicants: 1, group: "C" },
+            "동의대학교": { key: "KCTY9E3T", applicants: 1, group: "C" },
+            "배재대학교": { key: "5DVC1M9J", applicants: 1, group: "C" },
+            "베를린 공과대학교": { key: "NBNVKAHE", applicants: 1, group: "C" },
+            "부산외국어대학교": { key: "7TOVB5DX", applicants: 1, group: "C" },
+            "삼육대학교": { key: "HDDSG7Y3", applicants: 1, group: "C" },
+            "수원대학교": { key: "4X6CW73S", applicants: 1, group: "C" },
+            "순천향대학교": { key: "MWDTVXTS", applicants: 1, group: "C" },
+            "장로회신학대학교": { key: "FICLI5BB", applicants: 1, group: "C" },
+            "춘천교육대학교": { key: "4QUM6JWI", applicants: 1, group: "C" },
+            "한국전통문화대학교": { key: "K59D9YHM", applicants: 1, group: "C" },
+            "한남대학교": { key: "D9N5RYAE", applicants: 1, group: "C" },
+            "한성대학교": { key: "WARSWILM", applicants: 1, group: "C" },
+            "협성대학교": { key: "48BDZ48B", applicants: 1, group: "C" },
+            "호서대학교": { key: "Y4IZLUSL", applicants: 1, group: "C" }
+        };
+
+        let allData = [];
+        let sortColumn = 'usagePercent';
+        let sortDirection = 'desc';
+
+        async function fetchData() {
+            const keys = Object.values(universities).map(u => u.key);
+
+            try {
+                const response = await fetch('/api/coupon-batch', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ keys })
+                });
+
+                if (!response.ok) {
+                    throw new Error('API 요청 실패');
+                }
+
+                const data = await response.json();
+                processData(data);
+            } catch (error) {
+                document.getElementById('content').innerHTML = `
+                    <div class="error">
+                        <p>데이터를 불러오는 중 오류가 발생했습니다.</p>
+                        <p>${error.message}</p>
+                        <button class="refresh-btn" onclick="fetchData()">다시 시도</button>
+                    </div>
+                `;
+            }
+        }
+
+        function processData(data) {
+            allData = [];
+
+            for (const [name, uniData] of Object.entries(universities)) {
+                const key = uniData.key;
+                if (data[key]) {
+                    const info = data[key];
+                    const used = info.coupon_count_total - info.coupon_count;
+                    const usagePercent = (used / info.coupon_count_total) * 100;
+
+                    allData.push({
+                        name,
+                        key,
+                        applicants: uniData.applicants,
+                        group: uniData.group,
+                        total: info.coupon_count_total,
+                        remaining: info.coupon_count,
+                        used,
+                        usagePercent
+                    });
+                }
+            }
+
+            renderDashboard();
+            document.getElementById('lastUpdated').textContent =
+                `마지막 업데이트: ${new Date().toLocaleString('ko-KR')}`;
+        }
+
+        function renderDashboard() {
+            const totalUniversities = allData.length;
+            const totalApplicants = allData.reduce((sum, d) => sum + d.applicants, 0);
+            const totalCoupons = allData.reduce((sum, d) => sum + d.total, 0);
+            const totalUsed = allData.reduce((sum, d) => sum + d.used, 0);
+            const avgUsage = totalCoupons > 0 ? (totalUsed / totalCoupons) * 100 : 0;
+
+            const html = `
+                <div class="stats-summary">
+                    <div class="stat-card">
+                        <h3>총 대학교 수</h3>
+                        <div class="value">${totalUniversities}</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>총 신청자 수</h3>
+                        <div class="value">${totalApplicants.toLocaleString()}</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>총 쿠폰 수</h3>
+                        <div class="value">${totalCoupons.toLocaleString()}</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>사용된 쿠폰</h3>
+                        <div class="value">${totalUsed.toLocaleString()}</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>평균 사용률</h3>
+                        <div class="value">${avgUsage.toFixed(1)}%</div>
+                    </div>
+                </div>
+
+                <div class="charts-container">
+                    <div class="chart-card">
+                        <h2>A/B 그룹 사용률 현황</h2>
+                        <canvas id="topUsageChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <h2>전체 대학교 현황 <button class="refresh-btn" onclick="fetchData()">새로고침</button></h2>
+                    <div class="group-legend">
+                        <div class="group-legend-item">
+                            <span class="group-badge group-a">A</span>
+                            <span class="discount-info">연구독 <strong>40%</strong> / 월구독 <strong>20%</strong> 할인</span>
+                        </div>
+                        <div class="group-legend-item">
+                            <span class="group-badge group-b">B</span>
+                            <span class="discount-info">연구독 <strong>30%</strong> / 월구독 <strong>10%</strong> 할인</span>
+                        </div>
+                        <div class="group-legend-item">
+                            <span class="group-badge group-c">C</span>
+                            <span class="discount-info">연구독 <strong>15%</strong> / 월구독 <strong>5%</strong> 할인</span>
+                        </div>
+                    </div>
+                    <div class="search-box">
+                        <input type="text" id="searchInput" placeholder="대학교 검색..." oninput="filterTable()">
+                    </div>
+                    <table id="dataTable">
+                        <thead>
+                            <tr>
+                                <th onclick="sortTable('name')">대학교명 <span class="sort-icon">↕</span></th>
+                                <th onclick="sortTable('group')">그룹 <span class="sort-icon">↕</span></th>
+                                <th onclick="sortTable('applicants')">신청자 <span class="sort-icon">↕</span></th>
+                                <th onclick="sortTable('total')">총 쿠폰 <span class="sort-icon">↕</span></th>
+                                <th onclick="sortTable('used')">사용 <span class="sort-icon">↕</span></th>
+                                <th onclick="sortTable('remaining')">잔여 <span class="sort-icon">↕</span></th>
+                                <th onclick="sortTable('usagePercent')">사용률 <span class="sort-icon">↕</span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            document.getElementById('content').innerHTML = html;
+            renderTable();
+            renderCharts();
+        }
+
+        function renderTable(filteredData = null) {
+            const data = filteredData || [...allData];
+
+            data.sort((a, b) => {
+                const aVal = a[sortColumn];
+                const bVal = b[sortColumn];
+                if (typeof aVal === 'string') {
+                    return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                }
+                return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+            });
+
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = data.map(d => {
+                const usageClass = d.usagePercent >= 70 ? 'usage-high' :
+                                   d.usagePercent >= 40 ? 'usage-medium' : 'usage-low';
+                const groupClass = d.group === 'A' ? 'group-a' : d.group === 'B' ? 'group-b' : 'group-c';
+                return `
+                    <tr>
+                        <td>${d.name}</td>
+                        <td><span class="group-badge ${groupClass}">${d.group}</span></td>
+                        <td>${d.applicants.toLocaleString()}</td>
+                        <td>${d.total.toLocaleString()}</td>
+                        <td>${d.used.toLocaleString()}</td>
+                        <td>${d.remaining.toLocaleString()}</td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <div class="progress-bar" style="width: 100px;">
+                                    <div class="fill ${usageClass}" style="width: ${d.usagePercent}%"></div>
+                                </div>
+                                <span>${d.usagePercent.toFixed(1)}%</span>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function sortTable(column) {
+            if (sortColumn === column) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = column;
+                sortDirection = 'desc';
+            }
+            filterTable();
+        }
+
+        function filterTable() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const filtered = allData.filter(d => d.name.toLowerCase().includes(searchTerm));
+            renderTable(filtered);
+        }
+
+        function renderCharts() {
+            // Top 20 Usage Chart (A, B 그룹만)
+            const topData = [...allData]
+                .filter(d => d.group === 'A' || d.group === 'B')
+                .sort((a, b) => b.usagePercent - a.usagePercent)
+                .slice(0, 20);
+
+            new Chart(document.getElementById('topUsageChart'), {
+                type: 'bar',
+                data: {
+                    labels: topData.map(d => d.name),
+                    datasets: [{
+                        label: '사용률 (%)',
+                        data: topData.map(d => d.usagePercent),
+                        backgroundColor: topData.map(d => {
+                            if (d.usagePercent >= 70) return 'rgba(245, 101, 101, 0.8)';
+                            if (d.usagePercent >= 40) return 'rgba(237, 137, 54, 0.8)';
+                            return 'rgba(72, 187, 120, 0.8)';
+                        }),
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            max: 100,
+                            grid: { color: 'rgba(255,255,255,0.1)' },
+                            ticks: { color: '#a0aec0' }
+                        },
+                        y: {
+                            grid: { display: false },
+                            ticks: { color: '#a0aec0' }
+                        }
+                    }
+                }
+            });
+
+        }
+
+        // Set chart canvas height
+        document.addEventListener('DOMContentLoaded', () => {
+            const style = document.createElement('style');
+            style.textContent = `
+                #topUsageChart { height: 500px !important; }
+            `;
+            document.head.appendChild(style);
+        });
+
+        // Initial load
+        fetchData();
+    </script>
+</body>
+</html>

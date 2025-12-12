@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/api/coupon-batch", "destination": "/api/coupon-batch" }
+  ]
+}

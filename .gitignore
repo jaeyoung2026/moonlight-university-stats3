@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Local files
+server.js
+data.json
+.DS_Store
+*.csv
+prompt-log
+
+# IDE
+.vscode/
+.idea/
+
+# Vercel
+.vercel/
