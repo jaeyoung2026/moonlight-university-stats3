@@ -131,7 +131,7 @@ const API_BASE = 'https://www.themoonlight.io/api/organization';
 const HISTORY_DIR = path.join(__dirname, '..', 'history');
 const CURRENT_FILE = path.join(HISTORY_DIR, 'current.json');
 const DAILY_DIR = path.join(HISTORY_DIR, 'daily');
-const MAX_SNAPSHOTS = 60;
+const MAX_SNAPSHOTS = 14; // 5분 간격 × 12 = 1시간 + 버퍼 2개
 const RETENTION_DAYS = 30;
 
 // API 호출: 단체 쿠폰 데이터
