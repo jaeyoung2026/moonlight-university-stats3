@@ -378,8 +378,9 @@ async function main() {
         saveCurrent(current);
         console.log(`Saved snapshot. Total: ${current.snapshots.length}`);
 
-        // 3. 정각(분=0)일 때 이전 시간 데이터를 daily에 머지
-        if (currentMinute === 0 && current.snapshots.length > 0) {
+        // 3. 0~4분 사이일 때 이전 시간 데이터를 daily에 머지
+        // (GitHub Actions 지연 대비: 정각에 실행 안되어도 0~4분 사이면 집계)
+        if (currentMinute < 5 && current.snapshots.length > 0) {
             // 이전 시간(현재 시간 - 1)의 스냅샷을 집계
             const prevHour = (currentHour + 23) % 24;
             const prevDate = new Date(now);

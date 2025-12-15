@@ -221,11 +221,57 @@
             return dailyData;
         }
 
+        // current.json에서 현재 시간대의 실시간 값 계산
+        function getCurrentHourValue(current) {
+            if (!current || !current.snapshots || current.snapshots.length === 0) {
+                return null;
+            }
+
+            const now = new Date();
+            const currentHour = now.getUTCHours();
+            const todayStr = now.toISOString().slice(0, 10);
+
+            // 현재 시간대의 스냅샷 필터링
+            const hourSnapshots = current.snapshots.filter(s => {
+                const snapTime = new Date(s.time);
+                return snapTime.getUTCHours() === currentHour &&
+                       snapTime.toISOString().slice(0, 10) === todayStr;
+            });
+
+            if (hourSnapshots.length === 0) return null;
+
+            // 평균 계산
+            const types = selectedType === 'all' ? ['group', 'personal'] : [selectedType];
+            let totalValue = 0;
+
+            for (const snap of hourSnapshots) {
+                for (const t of types) {
+                    if (snap[t]) {
+                        if (selectedUniversity === '__ALL__') {
+                            totalValue += Object.values(snap[t]).reduce((sum, v) => sum + (v.used || 0), 0);
+                        } else {
+                            totalValue += snap[t][selectedUniversity]?.used || 0;
+                        }
+                    }
+                }
+            }
+
+            return {
+                value: Math.round(totalValue / hourSnapshots.length),
+                hour: currentHour,
+                date: todayStr,
+                samples: hourSnapshots.length
+            };
+        }
+
         // 히트맵 렌더링 (X축: 날짜, Y축: 시간)
         async function renderHeatmap() {
             const allData = await loadAllDailyData();
             const dates = getAvailableDates();
             const hours = Array.from({ length: 24 }, (_, i) => `${23 - i}:00`);
+
+            // 현재 시간대 실시간 값
+            const currentHourData = getCurrentHourValue(currentData);
 
             // 대학교 목록 추출
             const universities = getUniversitiesFromAllData(allData, selectedType);
@@ -242,7 +288,13 @@
                     let value = 0;
                     const actualHour = 23 - hourIdx; // 0시가 위로 가도록 역순
 
-                    if (data && data.hours) {
+                    // 현재 시간대면 실시간 데이터 사용
+                    if (currentHourData &&
+                        currentHourData.date === dateStr &&
+                        currentHourData.hour === actualHour) {
+                        value = currentHourData.value;
+                    } else if (data && data.hours) {
+                        // daily 집계 데이터 사용
                         const hourData = data.hours.find(h => h.hour === actualHour);
                         if (hourData) {
                             // type에 따라 데이터 합산
@@ -285,7 +337,12 @@
                         const hour = 23 - params.data[1]; // 역순 보정
                         const value = params.data[2];
                         const label = selectedUniversity === '__ALL__' ? '전체' : selectedUniversity;
-                        return `<strong>${label}</strong><br/>${date} ${hour}:00<br/>사용: ${value}개`;
+                        // 현재 시간대 실시간 데이터인지 확인
+                        const isLive = currentHourData &&
+                                       currentHourData.date === date &&
+                                       currentHourData.hour === hour;
+                        const liveTag = isLive ? '<span style="color:#48bb78;">(실시간)</span> ' : '';
+                        return `<strong>${label}</strong><br/>${date} ${hour}:00 ${liveTag}<br/>사용: ${value}개`;
                     }
                 },
                 grid: {
