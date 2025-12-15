@@ -2,8 +2,7 @@ name: Collect Coupon History
 
 on:
   schedule:
-    # 1분마다 실행 (GitHub Actions 최소 주기는 5분이지만 1분으로 설정)
-    - cron: '* * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
     # 수동 실행 지원
 
