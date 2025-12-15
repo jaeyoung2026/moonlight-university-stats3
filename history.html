@@ -26,11 +26,14 @@
             border-color: #3182ce;
         }
         .chart-container {
-            background: #fff;
+            background: #1a202c;
             border-radius: 12px;
             padding: 20px;
             margin-bottom: 20px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+        }
+        .chart-container h2 {
+            color: #e2e8f0;
         }
         .controls {
             display: flex;
@@ -41,13 +44,15 @@
         }
         .controls label {
             font-weight: 500;
-            color: #4a5568;
+            color: #a0aec0;
         }
         .controls select, .controls input {
             padding: 8px 12px;
-            border: 1px solid #e2e8f0;
+            border: 1px solid #4a5568;
             border-radius: 6px;
             font-size: 14px;
+            background: #2d3748;
+            color: #e2e8f0;
         }
         .type-toggle {
             display: flex;
@@ -55,20 +60,20 @@
         }
         .type-btn {
             padding: 8px 16px;
-            border: 2px solid #3182ce;
-            background: #fff;
-            color: #3182ce;
+            border: 2px solid #4299e1;
+            background: #2d3748;
+            color: #4299e1;
             border-radius: 6px;
             cursor: pointer;
             font-weight: 500;
             transition: all 0.2s;
         }
         .type-btn.active {
-            background: #3182ce;
+            background: #4299e1;
             color: #fff;
         }
         .type-btn:hover:not(.active) {
-            background: #ebf8ff;
+            background: #374151;
         }
         #heatmap {
             width: 100%;
@@ -105,7 +110,7 @@
         .no-data {
             text-align: center;
             padding: 60px 20px;
-            color: #718096;
+            color: #a0aec0;
         }
         .no-data h3 {
             margin-bottom: 10px;
@@ -136,7 +141,7 @@
     <script>
         let currentData = null;
         let dailyData = {};
-        let selectedType = 'group'; // 'group' or 'personal'
+        let selectedType = 'all'; // 'all', 'group' or 'personal'
         let selectedUniversity = '__ALL__'; // 기본값: 전체
         let heatmapChart = null;
 
@@ -175,14 +180,13 @@
             }
         }
 
-        // 최근 30일 날짜 목록 (과거 -> 현재 순)
+        // 12월 11일부터 1월 10일까지 전체 날짜 목록
         function getAvailableDates() {
             const dates = [];
-            const today = new Date();
+            const startDate = new Date('2025-12-11');
+            const endDate = new Date('2026-01-10');
 
-            for (let i = 29; i >= 0; i--) {
-                const d = new Date(today);
-                d.setDate(d.getDate() - i);
+            for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
                 dates.push(d.toISOString().slice(0, 10));
             }
 
@@ -196,8 +200,12 @@
             for (const data of Object.values(allDailyData)) {
                 if (data && data.hours) {
                     for (const hour of data.hours) {
-                        const typeData = hour[type] || {};
-                        Object.keys(typeData).forEach(u => unis.add(u));
+                        // type이 'all'이면 group과 personal 모두에서 추출
+                        const types = type === 'all' ? ['group', 'personal'] : [type];
+                        for (const t of types) {
+                            const typeData = hour[t] || {};
+                            Object.keys(typeData).forEach(u => unis.add(u));
+                        }
                     }
                 }
             }
@@ -217,7 +225,7 @@
         async function renderHeatmap() {
             const allData = await loadAllDailyData();
             const dates = getAvailableDates();
-            const hours = Array.from({ length: 24 }, (_, i) => `${i}:00`);
+            const hours = Array.from({ length: 24 }, (_, i) => `${23 - i}:00`);
 
             // 대학교 목록 추출
             const universities = getUniversitiesFromAllData(allData, selectedType);
@@ -232,15 +240,22 @@
 
                 for (let hourIdx = 0; hourIdx < 24; hourIdx++) {
                     let value = 0;
+                    const actualHour = 23 - hourIdx; // 0시가 위로 가도록 역순
 
                     if (data && data.hours) {
-                        const hourData = data.hours.find(h => h.hour === hourIdx);
-                        if (hourData && hourData[selectedType]) {
-                            if (selectedUniversity === '__ALL__') {
-                                // 전체: 모든 대학교 합계
-                                value = Object.values(hourData[selectedType]).reduce((sum, v) => sum + (v.avg || 0), 0);
-                            } else {
-                                value = hourData[selectedType][selectedUniversity]?.avg || 0;
+                        const hourData = data.hours.find(h => h.hour === actualHour);
+                        if (hourData) {
+                            // type에 따라 데이터 합산
+                            const types = selectedType === 'all' ? ['group', 'personal'] : [selectedType];
+                            for (const t of types) {
+                                if (hourData[t]) {
+                                    if (selectedUniversity === '__ALL__') {
+                                        // 전체: 모든 대학교 합계
+                                        value += Object.values(hourData[t]).reduce((sum, v) => sum + (v.avg || 0), 0);
+                                    } else {
+                                        value += hourData[t][selectedUniversity]?.avg || 0;
+                                    }
+                                }
                             }
                         }
                     }
@@ -262,41 +277,40 @@
             const option = {
                 tooltip: {
                     position: 'top',
+                    backgroundColor: '#2d3748',
+                    borderColor: '#4a5568',
+                    textStyle: { color: '#e2e8f0' },
                     formatter: function (params) {
                         const date = dates[params.data[0]];
-                        const hour = params.data[1];
+                        const hour = 23 - params.data[1]; // 역순 보정
                         const value = params.data[2];
                         const label = selectedUniversity === '__ALL__' ? '전체' : selectedUniversity;
                         return `<strong>${label}</strong><br/>${date} ${hour}:00<br/>사용: ${value}개`;
                     }
                 },
                 grid: {
-                    top: '5%',
-                    left: '8%',
-                    right: '5%',
-                    bottom: '15%'
+                    top: '3%',
+                    left: '6%',
+                    right: '3%',
+                    bottom: '12%'
                 },
                 xAxis: {
                     type: 'category',
                     data: dateLabels,
-                    splitArea: { show: true },
+                    splitArea: { show: true, areaStyle: { color: ['#1a202c', '#2d3748'] } },
                     axisLabel: {
-                        color: '#4a5568',
+                        color: '#a0aec0',
                         rotate: 45,
-                        fontSize: 10
+                        fontSize: 11
                     },
-                    name: '날짜',
-                    nameLocation: 'middle',
-                    nameGap: 35
+                    splitLine: { lineStyle: { color: '#4a5568' } }
                 },
                 yAxis: {
                     type: 'category',
                     data: hours,
-                    splitArea: { show: true },
-                    axisLabel: { color: '#4a5568', fontSize: 10 },
-                    name: '시간',
-                    nameLocation: 'middle',
-                    nameGap: 40
+                    splitArea: { show: true, areaStyle: { color: ['#1a202c', '#2d3748'] } },
+                    axisLabel: { color: '#a0aec0', fontSize: 11 },
+                    splitLine: { lineStyle: { color: '#4a5568' } }
                 },
                 visualMap: {
                     min: 0,
@@ -304,22 +318,26 @@
                     calculable: true,
                     orient: 'horizontal',
                     left: 'center',
-                    bottom: '2%',
+                    bottom: '1%',
                     inRange: {
-                        color: ['#e6fffa', '#81e6d9', '#38b2ac', '#2c7a7b', '#234e52']
+                        color: ['#1a365d', '#2b6cb0', '#3182ce', '#63b3ed', '#bee3f8']
                     },
                     text: ['높음', '낮음'],
-                    textStyle: { color: '#4a5568' }
+                    textStyle: { color: '#a0aec0' }
                 },
                 series: [{
                     name: '쿠폰 사용',
                     type: 'heatmap',
                     data: heatmapData,
                     label: { show: false },
+                    itemStyle: {
+                        borderColor: '#2d3748',
+                        borderWidth: 1
+                    },
                     emphasis: {
                         itemStyle: {
                             shadowBlur: 10,
-                            shadowColor: 'rgba(0, 0, 0, 0.5)'
+                            shadowColor: 'rgba(0, 0, 0, 0.3)'
                         }
                     }
                 }]
@@ -342,18 +360,28 @@
             }
 
             const latest = current.snapshots[current.snapshots.length - 1];
-            const typeData = latest[selectedType] || {};
 
-            const totalUsed = Object.values(typeData).reduce((sum, v) => sum + (v.used || 0), 0);
-            const totalCoupons = Object.values(typeData).reduce((sum, v) => sum + (v.total || 0), 0);
+            // type에 따라 데이터 합산
+            const types = selectedType === 'all' ? ['group', 'personal'] : [selectedType];
+            let totalUsed = 0, totalCoupons = 0;
+            const allUnis = new Set();
+
+            for (const t of types) {
+                const typeData = latest[t] || {};
+                totalUsed += Object.values(typeData).reduce((sum, v) => sum + (v.used || 0), 0);
+                totalCoupons += Object.values(typeData).reduce((sum, v) => sum + (v.total || 0), 0);
+                Object.keys(typeData).forEach(u => allUnis.add(u));
+            }
+
             const usageRate = totalCoupons > 0 ? (totalUsed / totalCoupons * 100).toFixed(1) : 0;
-            const uniCount = Object.keys(typeData).length;
+            const uniCount = allUnis.size;
 
             const lastUpdate = new Date(latest.time).toLocaleString('ko-KR');
+            const typeLabel = selectedType === 'all' ? '전체' : (selectedType === 'group' ? '단체 쿠폰' : '개인 쿠폰');
 
             return `
                 <div class="realtime-section">
-                    <h3>실시간 현황 - ${selectedType === 'group' ? '단체 쿠폰' : '개인 쿠폰'}</h3>
+                    <h3>실시간 현황 - ${typeLabel}</h3>
                     <div class="realtime-stats">
                         <div class="realtime-stat">
                             <div class="value">${totalUsed.toLocaleString()}</div>
@@ -366,10 +394,6 @@
                         <div class="realtime-stat">
                             <div class="value">${usageRate}%</div>
                             <div class="label">사용률</div>
-                        </div>
-                        <div class="realtime-stat">
-                            <div class="value">${uniCount}</div>
-                            <div class="label">대학교 수</div>
                         </div>
                         <div class="realtime-stat">
                             <div class="value">${current.snapshots.length}</div>
@@ -392,6 +416,7 @@
                 <div class="chart-container">
                     <div class="controls">
                         <div class="type-toggle">
+                            <button class="type-btn ${selectedType === 'all' ? 'active' : ''}" onclick="switchType('all')">전체</button>
                             <button class="type-btn ${selectedType === 'group' ? 'active' : ''}" onclick="switchType('group')">단체 쿠폰</button>
                             <button class="type-btn ${selectedType === 'personal' ? 'active' : ''}" onclick="switchType('personal')">개인 쿠폰</button>
                         </div>
