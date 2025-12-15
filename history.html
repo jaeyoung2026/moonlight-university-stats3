@@ -253,42 +253,44 @@
             return false;
         }
 
-        // current.json에서 현재 시간대의 실시간 값 계산
+        // current.json에서 최신 스냅샷 시간대의 실시간 값 계산
         // 기준 시점(15시) 대비 증가분을 계산
         function getCurrentHourValue(current) {
             if (!current || !current.snapshots || current.snapshots.length === 0) {
                 return null;
             }
 
-            const now = new Date();
-            const currentHour = getKSTHour(now);
-            const todayStr = getKSTDateStr(now);
+            // 최신 스냅샷의 시간을 기준으로 함 (사용자의 현재 시간이 아님)
+            const latestSnap = current.snapshots[current.snapshots.length - 1];
+            const latestTime = new Date(latestSnap.time);
+            const snapshotHour = getKSTHour(latestTime);
+            const snapshotDateStr = getKSTDateStr(latestTime);
 
             // 기준 시점 이후가 아니면 null 반환
-            if (!isAfterBaseline(todayStr, currentHour)) {
+            if (!isAfterBaseline(snapshotDateStr, snapshotHour)) {
                 return null;
             }
 
-            // 현재 시간대의 스냅샷 필터링 (KST 기준)
+            // 최신 스냅샷과 같은 시간대의 스냅샷 필터링 (KST 기준)
             const hourSnapshots = current.snapshots.filter(s => {
                 const snapTime = new Date(s.time);
-                return getKSTHour(snapTime) === currentHour &&
-                       getKSTDateStr(snapTime) === todayStr;
+                return getKSTHour(snapTime) === snapshotHour &&
+                       getKSTDateStr(snapTime) === snapshotDateStr;
             });
 
             if (hourSnapshots.length === 0) return null;
 
             // 최신 스냅샷의 현재 총 사용량
             const types = selectedType === 'all' ? ['group', 'personal'] : [selectedType];
-            const latestSnap = hourSnapshots[hourSnapshots.length - 1];
+            const finalSnap = hourSnapshots[hourSnapshots.length - 1];
             let currentTotal = 0;
 
             for (const t of types) {
-                if (latestSnap[t]) {
+                if (finalSnap[t]) {
                     if (selectedUniversity === '__ALL__') {
-                        currentTotal += Object.values(latestSnap[t]).reduce((sum, v) => sum + (v.used || 0), 0);
+                        currentTotal += Object.values(finalSnap[t]).reduce((sum, v) => sum + (v.used || 0), 0);
                     } else {
-                        currentTotal += latestSnap[t][selectedUniversity]?.used || 0;
+                        currentTotal += finalSnap[t][selectedUniversity]?.used || 0;
                     }
                 }
             }
@@ -298,8 +300,8 @@
 
             return {
                 value: Math.max(0, increment),  // 증가분 (음수 방지)
-                hour: currentHour,
-                date: todayStr,
+                hour: snapshotHour,
+                date: snapshotDateStr,
                 samples: hourSnapshots.length,
                 currentTotal: currentTotal  // 디버깅용
             };
@@ -433,15 +435,11 @@
                             const value = params.data[2];
                             return value > 0 ? value : '';
                         },
-                        fontSize: 9,
-                        color: function(params) {
-                            // 값이 maxValue의 60% 이상이면 어두운 색 (밝은 셀)
-                            const value = params.data[2];
-                            const threshold = maxValue * 0.6;
-                            return value >= threshold ? '#1a365d' : '#fff';
-                        },
-                        textShadowColor: 'rgba(0,0,0,0.3)',
-                        textShadowBlur: 1
+                        fontSize: 10,
+                        fontWeight: 'bold',
+                        color: '#fff',
+                        textBorderColor: '#000',
+                        textBorderWidth: 2
                     },
                     itemStyle: {
                         borderColor: '#2d3748',
