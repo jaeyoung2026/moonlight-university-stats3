@@ -222,16 +222,6 @@
             // 대학교 목록 추출
             const universities = getUniversitiesFromAllData(allData, selectedType);
 
-            if (universities.length === 0) {
-                document.getElementById('heatmap').innerHTML = `
-                    <div class="no-data">
-                        <h3>데이터 없음</h3>
-                        <p>${selectedType === 'group' ? '단체' : '개인'} 쿠폰 데이터가 없습니다.</p>
-                    </div>
-                `;
-                return;
-            }
-
             // 히트맵 데이터 생성 [x: 날짜 인덱스, y: 시간 인덱스, value: 사용량]
             const heatmapData = [];
             let maxValue = 0;
