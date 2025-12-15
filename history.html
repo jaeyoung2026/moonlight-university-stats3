@@ -466,7 +466,7 @@
             if (!current || !current.snapshots || current.snapshots.length === 0) {
                 return `
                     <div class="realtime-section">
-                        <h3>실시간 현황 (최근 1시간)</h3>
+                        <h3>실시간 현황 (5분 갱신)</h3>
                         <p>아직 수집된 데이터가 없습니다.</p>
                     </div>
                 `;
@@ -494,7 +494,7 @@
 
             return `
                 <div class="realtime-section">
-                    <h3>실시간 현황 - ${typeLabel}</h3>
+                    <h3>실시간 현황 (5분 갱신) - ${typeLabel}</h3>
                     <div class="realtime-stats">
                         <div class="realtime-stat">
                             <div class="value">${totalUsed.toLocaleString()}</div>
@@ -540,7 +540,7 @@
                             </select>
                         </label>
                     </div>
-                    <h2>시간별 사용 현황 히트맵 (최근 30일)</h2>
+                    <h2>시간별 사용 현황 히트맵</h2>
                     <div id="heatmap"></div>
                 </div>
 
