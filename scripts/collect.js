@@ -1,6 +1,23 @@
 const fs = require('fs');
 const path = require('path');
 
+// KST 시간대 헬퍼 함수 (UTC+9)
+function toKST(date) {
+    return new Date(date.getTime() + 9 * 60 * 60 * 1000);
+}
+
+function getKSTHour(date) {
+    return toKST(date).getUTCHours();
+}
+
+function getKSTMinute(date) {
+    return toKST(date).getUTCMinutes();
+}
+
+function getKSTDateStr(date) {
+    return toKST(date).toISOString().slice(0, 10);
+}
+
 // 대학교 목록 (index.html에서 추출)
 const universities = {
     "이화여자대학교": { key: "91PBI6D7", group: "A" },
@@ -261,10 +278,10 @@ function addHourlyAggregate(snapshots, hour, date) {
         dailyData = { date: dateStr, hours: [] };
     }
 
-    // 해당 시간대 스냅샷 필터링
+    // 해당 시간대 스냅샷 필터링 (KST 기준)
     const hourSnapshots = snapshots.filter(s => {
         const snapTime = new Date(s.time);
-        return snapTime.getHours() === hour;
+        return getKSTHour(snapTime) === hour && getKSTDateStr(snapTime) === dateStr;
     });
 
     if (hourSnapshots.length === 0) {
@@ -359,8 +376,10 @@ function cleanupOldDailyFiles() {
 async function main() {
     try {
         const now = new Date();
-        const currentMinute = now.getMinutes();
-        const currentHour = now.getHours();
+        const currentMinute = getKSTMinute(now);
+        const currentHour = getKSTHour(now);
+
+        console.log(`Current KST time: ${getKSTDateStr(now)} ${currentHour}:${currentMinute.toString().padStart(2, '0')}`);
 
         // 1. 새 스냅샷 생성
         const snapshot = await createSnapshot();
@@ -381,11 +400,13 @@ async function main() {
         // 3. 0~4분 사이일 때 이전 시간 데이터를 daily에 머지
         // (GitHub Actions 지연 대비: 정각에 실행 안되어도 0~4분 사이면 집계)
         if (currentMinute < 5 && current.snapshots.length > 0) {
-            // 이전 시간(현재 시간 - 1)의 스냅샷을 집계
+            // 이전 시간(현재 시간 - 1)의 스냅샷을 집계 (KST 기준)
             const prevHour = (currentHour + 23) % 24;
-            const prevDate = new Date(now);
+            // KST 기준 이전 날짜 계산
+            const kstNow = toKST(now);
+            const prevDate = new Date(kstNow);
             if (currentHour === 0) {
-                prevDate.setDate(prevDate.getDate() - 1);
+                prevDate.setUTCDate(prevDate.getUTCDate() - 1);
             }
 
             addHourlyAggregate(current.snapshots, prevHour, prevDate);

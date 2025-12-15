@@ -221,46 +221,87 @@
             return dailyData;
         }
 
+        // UTC를 KST로 변환하는 헬퍼 함수
+        function toKST(date) {
+            const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+            return kst;
+        }
+
+        // KST 기준 날짜 문자열 (YYYY-MM-DD)
+        function getKSTDateStr(date) {
+            const kst = toKST(date);
+            return kst.toISOString().slice(0, 10);
+        }
+
+        // KST 기준 시간
+        function getKSTHour(date) {
+            const kst = toKST(date);
+            return kst.getUTCHours();
+        }
+
+        // 기준 시점: 2025-12-15 15시까지의 누적값
+        const BASELINE = {
+            date: '2025-12-15',
+            hour: 15,
+            value: 130  // 15시까지의 누적 사용량
+        };
+
+        // 기준 시점 이후인지 확인
+        function isAfterBaseline(dateStr, hour) {
+            if (dateStr > BASELINE.date) return true;
+            if (dateStr === BASELINE.date && hour > BASELINE.hour) return true;
+            return false;
+        }
+
         // current.json에서 현재 시간대의 실시간 값 계산
+        // 기준 시점(15시) 대비 증가분을 계산
         function getCurrentHourValue(current) {
             if (!current || !current.snapshots || current.snapshots.length === 0) {
                 return null;
             }
 
             const now = new Date();
-            const currentHour = now.getUTCHours();
-            const todayStr = now.toISOString().slice(0, 10);
+            const currentHour = getKSTHour(now);
+            const todayStr = getKSTDateStr(now);
 
-            // 현재 시간대의 스냅샷 필터링
+            // 기준 시점 이후가 아니면 null 반환
+            if (!isAfterBaseline(todayStr, currentHour)) {
+                return null;
+            }
+
+            // 현재 시간대의 스냅샷 필터링 (KST 기준)
             const hourSnapshots = current.snapshots.filter(s => {
                 const snapTime = new Date(s.time);
-                return snapTime.getUTCHours() === currentHour &&
-                       snapTime.toISOString().slice(0, 10) === todayStr;
+                return getKSTHour(snapTime) === currentHour &&
+                       getKSTDateStr(snapTime) === todayStr;
             });
 
             if (hourSnapshots.length === 0) return null;
 
-            // 평균 계산
+            // 최신 스냅샷의 현재 총 사용량
             const types = selectedType === 'all' ? ['group', 'personal'] : [selectedType];
-            let totalValue = 0;
+            const latestSnap = hourSnapshots[hourSnapshots.length - 1];
+            let currentTotal = 0;
 
-            for (const snap of hourSnapshots) {
-                for (const t of types) {
-                    if (snap[t]) {
-                        if (selectedUniversity === '__ALL__') {
-                            totalValue += Object.values(snap[t]).reduce((sum, v) => sum + (v.used || 0), 0);
-                        } else {
-                            totalValue += snap[t][selectedUniversity]?.used || 0;
-                        }
+            for (const t of types) {
+                if (latestSnap[t]) {
+                    if (selectedUniversity === '__ALL__') {
+                        currentTotal += Object.values(latestSnap[t]).reduce((sum, v) => sum + (v.used || 0), 0);
+                    } else {
+                        currentTotal += latestSnap[t][selectedUniversity]?.used || 0;
                     }
                 }
             }
 
+            // 기준값 대비 증가분 계산
+            const increment = currentTotal - BASELINE.value;
+
             return {
-                value: Math.round(totalValue / hourSnapshots.length),
+                value: Math.max(0, increment),  // 증가분 (음수 방지)
                 hour: currentHour,
                 date: todayStr,
-                samples: hourSnapshots.length
+                samples: hourSnapshots.length,
+                currentTotal: currentTotal  // 디버깅용
             };
         }
 
@@ -386,7 +427,22 @@
                     name: '쿠폰 사용',
                     type: 'heatmap',
                     data: heatmapData,
-                    label: { show: false },
+                    label: {
+                        show: true,
+                        formatter: function(params) {
+                            const value = params.data[2];
+                            return value > 0 ? value : '';
+                        },
+                        fontSize: 9,
+                        color: function(params) {
+                            // 값이 maxValue의 60% 이상이면 어두운 색 (밝은 셀)
+                            const value = params.data[2];
+                            const threshold = maxValue * 0.6;
+                            return value >= threshold ? '#1a365d' : '#fff';
+                        },
+                        textShadowColor: 'rgba(0,0,0,0.3)',
+                        textShadowBlur: 1
+                    },
                     itemStyle: {
                         borderColor: '#2d3748',
                         borderWidth: 1
