@@ -35,5 +35,7 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "chore: collect snapshot $(date -u +%Y-%m-%dT%H:%M)"
+            # 원격에 새 커밋이 있을 수 있으므로 pull --rebase 후 push
+            git pull --rebase origin main || true
             git push
           fi
