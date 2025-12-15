@@ -5,7 +5,6 @@ node_modules/
 server.js
 data.json
 .DS_Store
-*.csv
 prompt-log
 
 # IDE

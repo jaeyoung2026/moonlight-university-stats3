@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>쿠폰 사용 추이 - Moonlight</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="common.css">
+    <style>
+        /* Theme: Blue */
+        header h1 {
+            background: linear-gradient(90deg, #3182ce 0%, #2c5282 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .stat-value { color: #3182ce; }
+        .tab-btn {
+            border: 2px solid #3182ce;
+            color: #3182ce;
+        }
+        .tab-btn:hover { background: #ebf8ff; }
+        .tab-btn.active {
+            background: linear-gradient(90deg, #3182ce, #2c5282);
+            color: #fff;
+            border-color: #3182ce;
+        }
+        .chart-container {
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .controls {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+        .controls label {
+            font-weight: 500;
+            color: #4a5568;
+        }
+        .controls select, .controls input {
+            padding: 8px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .type-toggle {
+            display: flex;
+            gap: 10px;
+        }
+        .type-btn {
+            padding: 8px 16px;
+            border: 2px solid #3182ce;
+            background: #fff;
+            color: #3182ce;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .type-btn.active {
+            background: #3182ce;
+            color: #fff;
+        }
+        .type-btn:hover:not(.active) {
+            background: #ebf8ff;
+        }
+        #heatmap {
+            width: 100%;
+            height: 600px;
+        }
+        .realtime-section {
+            background: linear-gradient(135deg, #3182ce 0%, #2c5282 100%);
+            color: #fff;
+            padding: 15px 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        .realtime-section h3 {
+            margin: 0 0 10px 0;
+            font-size: 1rem;
+            opacity: 0.9;
+        }
+        .realtime-stats {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+        .realtime-stat {
+            text-align: center;
+        }
+        .realtime-stat .value {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        .realtime-stat .label {
+            font-size: 0.85rem;
+            opacity: 0.8;
+        }
+        .no-data {
+            text-align: center;
+            padding: 60px 20px;
+            color: #718096;
+        }
+        .no-data h3 {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Moonlight 쿠폰 사용 추이</h1>
+            <p>시간별 쿠폰 사용 현황 히트맵</p>
+            <div class="deadline-banner">쿠폰 사용 마감일: 2026년 1월 10일 (<span id="daysLeft"></span>)</div>
+            <div class="tab-nav">
+                <a href="index.html" class="tab-btn">대학교 단체 쿠폰</a>
+                <a href="personal.html" class="tab-btn">개인 쿠폰</a>
+                <a href="history.html" class="tab-btn active">사용 추이</a>
+            </div>
+        </header>
+
+        <div id="content">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>데이터를 불러오는 중...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentData = null;
+        let dailyData = {};
+        let selectedType = 'group'; // 'group' or 'personal'
+        let selectedUniversity = '__ALL__'; // 기본값: 전체
+        let heatmapChart = null;
+
+        // GitHub Raw URL (로컬 개발 시 상대경로 사용)
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const GITHUB_RAW_BASE = 'https://raw.githubusercontent.com/jaeyoung2026/moonlight-university-stats3/main';
+        const DATA_BASE = isLocal ? '' : GITHUB_RAW_BASE;
+
+        // 실시간 데이터 로드
+        async function loadCurrentData() {
+            try {
+                const url = `${DATA_BASE}/history/current.json`;
+                const response = await fetch(url);
+                if (!response.ok) return null;
+                return await response.json();
+            } catch (e) {
+                console.warn('No current data:', e);
+                return null;
+            }
+        }
+
+        // 일별 데이터 로드
+        async function loadDailyData(dateStr) {
+            if (dailyData[dateStr]) return dailyData[dateStr];
+
+            try {
+                const url = `${DATA_BASE}/history/daily/${dateStr}.json`;
+                const response = await fetch(url);
+                if (!response.ok) return null;
+                const data = await response.json();
+                dailyData[dateStr] = data;
+                return data;
+            } catch (e) {
+                console.warn(`No daily data for ${dateStr}:`, e);
+                return null;
+            }
+        }
+
+        // 최근 30일 날짜 목록 (과거 -> 현재 순)
+        function getAvailableDates() {
+            const dates = [];
+            const today = new Date();
+
+            for (let i = 29; i >= 0; i--) {
+                const d = new Date(today);
+                d.setDate(d.getDate() - i);
+                dates.push(d.toISOString().slice(0, 10));
+            }
+
+            return dates;
+        }
+
+        // 모든 일별 데이터에서 대학교 목록 추출
+        function getUniversitiesFromAllData(allDailyData, type) {
+            const unis = new Set();
+
+            for (const data of Object.values(allDailyData)) {
+                if (data && data.hours) {
+                    for (const hour of data.hours) {
+                        const typeData = hour[type] || {};
+                        Object.keys(typeData).forEach(u => unis.add(u));
+                    }
+                }
+            }
+
+            return Array.from(unis).sort();
+        }
+
+        // 여러 날짜의 데이터 로드
+        async function loadAllDailyData() {
+            const dates = getAvailableDates();
+            const promises = dates.map(d => loadDailyData(d));
+            await Promise.all(promises);
+            return dailyData;
+        }
+
+        // 히트맵 렌더링 (X축: 날짜, Y축: 시간)
+        async function renderHeatmap() {
+            const allData = await loadAllDailyData();
+            const dates = getAvailableDates();
+            const hours = Array.from({ length: 24 }, (_, i) => `${i}:00`);
+
+            // 대학교 목록 추출
+            const universities = getUniversitiesFromAllData(allData, selectedType);
+
+            if (universities.length === 0) {
+                document.getElementById('heatmap').innerHTML = `
+                    <div class="no-data">
+                        <h3>데이터 없음</h3>
+                        <p>${selectedType === 'group' ? '단체' : '개인'} 쿠폰 데이터가 없습니다.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // 히트맵 데이터 생성 [x: 날짜 인덱스, y: 시간 인덱스, value: 사용량]
+            const heatmapData = [];
+            let maxValue = 0;
+
+            for (let dateIdx = 0; dateIdx < dates.length; dateIdx++) {
+                const dateStr = dates[dateIdx];
+                const data = allData[dateStr];
+
+                for (let hourIdx = 0; hourIdx < 24; hourIdx++) {
+                    let value = 0;
+
+                    if (data && data.hours) {
+                        const hourData = data.hours.find(h => h.hour === hourIdx);
+                        if (hourData && hourData[selectedType]) {
+                            if (selectedUniversity === '__ALL__') {
+                                // 전체: 모든 대학교 합계
+                                value = Object.values(hourData[selectedType]).reduce((sum, v) => sum + (v.avg || 0), 0);
+                            } else {
+                                value = hourData[selectedType][selectedUniversity]?.avg || 0;
+                            }
+                        }
+                    }
+
+                    heatmapData.push([dateIdx, hourIdx, Math.round(value)]);
+                    maxValue = Math.max(maxValue, value);
+                }
+            }
+
+            // 날짜 라벨 (MM-DD 형식)
+            const dateLabels = dates.map(d => d.slice(5)); // "2025-12-15" -> "12-15"
+
+            if (heatmapChart) {
+                heatmapChart.dispose();
+            }
+
+            heatmapChart = echarts.init(document.getElementById('heatmap'));
+
+            const option = {
+                tooltip: {
+                    position: 'top',
+                    formatter: function (params) {
+                        const date = dates[params.data[0]];
+                        const hour = params.data[1];
+                        const value = params.data[2];
+                        const label = selectedUniversity === '__ALL__' ? '전체' : selectedUniversity;
+                        return `<strong>${label}</strong><br/>${date} ${hour}:00<br/>사용: ${value}개`;
+                    }
+                },
+                grid: {
+                    top: '5%',
+                    left: '8%',
+                    right: '5%',
+                    bottom: '15%'
+                },
+                xAxis: {
+                    type: 'category',
+                    data: dateLabels,
+                    splitArea: { show: true },
+                    axisLabel: {
+                        color: '#4a5568',
+                        rotate: 45,
+                        fontSize: 10
+                    },
+                    name: '날짜',
+                    nameLocation: 'middle',
+                    nameGap: 35
+                },
+                yAxis: {
+                    type: 'category',
+                    data: hours,
+                    splitArea: { show: true },
+                    axisLabel: { color: '#4a5568', fontSize: 10 },
+                    name: '시간',
+                    nameLocation: 'middle',
+                    nameGap: 40
+                },
+                visualMap: {
+                    min: 0,
+                    max: Math.max(maxValue, 100),
+                    calculable: true,
+                    orient: 'horizontal',
+                    left: 'center',
+                    bottom: '2%',
+                    inRange: {
+                        color: ['#e6fffa', '#81e6d9', '#38b2ac', '#2c7a7b', '#234e52']
+                    },
+                    text: ['높음', '낮음'],
+                    textStyle: { color: '#4a5568' }
+                },
+                series: [{
+                    name: '쿠폰 사용',
+                    type: 'heatmap',
+                    data: heatmapData,
+                    label: { show: false },
+                    emphasis: {
+                        itemStyle: {
+                            shadowBlur: 10,
+                            shadowColor: 'rgba(0, 0, 0, 0.5)'
+                        }
+                    }
+                }]
+            };
+
+            heatmapChart.setOption(option);
+
+            return universities;
+        }
+
+        // 실시간 통계 렌더링
+        function renderRealtimeStats(current) {
+            if (!current || !current.snapshots || current.snapshots.length === 0) {
+                return `
+                    <div class="realtime-section">
+                        <h3>실시간 현황 (최근 1시간)</h3>
+                        <p>아직 수집된 데이터가 없습니다.</p>
+                    </div>
+                `;
+            }
+
+            const latest = current.snapshots[current.snapshots.length - 1];
+            const typeData = latest[selectedType] || {};
+
+            const totalUsed = Object.values(typeData).reduce((sum, v) => sum + (v.used || 0), 0);
+            const totalCoupons = Object.values(typeData).reduce((sum, v) => sum + (v.total || 0), 0);
+            const usageRate = totalCoupons > 0 ? (totalUsed / totalCoupons * 100).toFixed(1) : 0;
+            const uniCount = Object.keys(typeData).length;
+
+            const lastUpdate = new Date(latest.time).toLocaleString('ko-KR');
+
+            return `
+                <div class="realtime-section">
+                    <h3>실시간 현황 - ${selectedType === 'group' ? '단체 쿠폰' : '개인 쿠폰'}</h3>
+                    <div class="realtime-stats">
+                        <div class="realtime-stat">
+                            <div class="value">${totalUsed.toLocaleString()}</div>
+                            <div class="label">총 사용</div>
+                        </div>
+                        <div class="realtime-stat">
+                            <div class="value">${totalCoupons.toLocaleString()}</div>
+                            <div class="label">총 쿠폰</div>
+                        </div>
+                        <div class="realtime-stat">
+                            <div class="value">${usageRate}%</div>
+                            <div class="label">사용률</div>
+                        </div>
+                        <div class="realtime-stat">
+                            <div class="value">${uniCount}</div>
+                            <div class="label">대학교 수</div>
+                        </div>
+                        <div class="realtime-stat">
+                            <div class="value">${current.snapshots.length}</div>
+                            <div class="label">스냅샷 수</div>
+                        </div>
+                    </div>
+                    <p style="margin-top:10px;font-size:0.85rem;opacity:0.8;">마지막 업데이트: ${lastUpdate}</p>
+                </div>
+            `;
+        }
+
+        // 메인 렌더링
+        async function render() {
+            currentData = await loadCurrentData();
+
+            // 먼저 기본 HTML 렌더링
+            const html = `
+                ${renderRealtimeStats(currentData)}
+
+                <div class="chart-container">
+                    <div class="controls">
+                        <div class="type-toggle">
+                            <button class="type-btn ${selectedType === 'group' ? 'active' : ''}" onclick="switchType('group')">단체 쿠폰</button>
+                            <button class="type-btn ${selectedType === 'personal' ? 'active' : ''}" onclick="switchType('personal')">개인 쿠폰</button>
+                        </div>
+                        <label>
+                            대학교:
+                            <select id="uniSelect" onchange="changeUniversity(this.value)">
+                                <option value="">로딩 중...</option>
+                            </select>
+                        </label>
+                    </div>
+                    <h2>시간별 사용 현황 히트맵 (최근 30일)</h2>
+                    <p style="color:#718096;font-size:0.9rem;">X축: 날짜 | Y축: 시간 (0~23시)</p>
+                    <div id="heatmap"></div>
+                </div>
+
+            `;
+
+            document.getElementById('content').innerHTML = html;
+
+            // 히트맵 렌더링 및 대학교 목록 가져오기
+            const universities = await renderHeatmap();
+
+            // 대학교 드롭다운 업데이트 (전체 옵션 추가)
+            if (universities && universities.length > 0) {
+                const uniSelect = document.getElementById('uniSelect');
+                const allOption = `<option value="__ALL__" ${selectedUniversity === '__ALL__' ? 'selected' : ''}>전체</option>`;
+                const uniOptions = universities.map(u =>
+                    `<option value="${u}" ${u === selectedUniversity ? 'selected' : ''}>${u}</option>`
+                ).join('');
+                uniSelect.innerHTML = allOption + uniOptions;
+            }
+
+        }
+
+        // 쿠폰 유형 전환
+        function switchType(type) {
+            selectedType = type;
+            selectedUniversity = '__ALL__'; // 타입 변경 시 전체로 초기화
+            render();
+        }
+
+        // 대학교 변경
+        async function changeUniversity(uni) {
+            selectedUniversity = uni;
+            await renderHeatmap();
+        }
+
+        // D-Day 계산
+        function updateDaysLeft() {
+            const deadline = new Date('2026-01-10T23:59:59');
+            const now = new Date();
+            const diff = deadline - now;
+            const daysLeft = Math.ceil(diff / (1000 * 60 * 60 * 24));
+            const el = document.getElementById('daysLeft');
+            if (el) {
+                if (daysLeft > 0) el.textContent = `D-${daysLeft}`;
+                else if (daysLeft === 0) el.textContent = 'D-Day';
+                else el.textContent = '마감됨';
+            }
+        }
+
+        // 윈도우 리사이즈 대응
+        window.addEventListener('resize', () => {
+            if (heatmapChart) heatmapChart.resize();
+        });
+
+        // 초기화
+        updateDaysLeft();
+        render();
+    </script>
+</body>
+</html>
