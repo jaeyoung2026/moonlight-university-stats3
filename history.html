@@ -253,58 +253,84 @@
             return false;
         }
 
-        // current.json에서 최신 스냅샷 시간대의 실시간 값 계산
-        // 기준 시점(15시) 대비 증가분을 계산
-        function getCurrentHourValue(current) {
+        // current.json에서 모든 시간대별 실시간 값 계산
+        // 각 시간대의 증가분 = 해당 시간 마지막 스냅샷 - 이전 시간 마지막 스냅샷
+        // 반환: { 'YYYY-MM-DD_HH': { value, hour, date, ... }, ... }
+        function getAllHourValues(current) {
             if (!current || !current.snapshots || current.snapshots.length === 0) {
-                return null;
+                return {};
             }
 
-            // 최신 스냅샷의 시간을 기준으로 함 (사용자의 현재 시간이 아님)
-            const latestSnap = current.snapshots[current.snapshots.length - 1];
-            const latestTime = new Date(latestSnap.time);
-            const snapshotHour = getKSTHour(latestTime);
-            const snapshotDateStr = getKSTDateStr(latestTime);
-
-            // 기준 시점 이후가 아니면 null 반환
-            if (!isAfterBaseline(snapshotDateStr, snapshotHour)) {
-                return null;
-            }
-
-            // 최신 스냅샷과 같은 시간대의 스냅샷 필터링 (KST 기준)
-            const hourSnapshots = current.snapshots.filter(s => {
-                const snapTime = new Date(s.time);
-                return getKSTHour(snapTime) === snapshotHour &&
-                       getKSTDateStr(snapTime) === snapshotDateStr;
-            });
-
-            if (hourSnapshots.length === 0) return null;
-
-            // 최신 스냅샷의 현재 총 사용량
             const types = selectedType === 'all' ? ['group', 'personal'] : [selectedType];
-            const finalSnap = hourSnapshots[hourSnapshots.length - 1];
-            let currentTotal = 0;
 
-            for (const t of types) {
-                if (finalSnap[t]) {
-                    if (selectedUniversity === '__ALL__') {
-                        currentTotal += Object.values(finalSnap[t]).reduce((sum, v) => sum + (v.used || 0), 0);
-                    } else {
-                        currentTotal += finalSnap[t][selectedUniversity]?.used || 0;
+            // 스냅샷에서 total 계산하는 헬퍼
+            function getTotal(snap) {
+                let total = 0;
+                for (const t of types) {
+                    if (snap[t]) {
+                        if (selectedUniversity === '__ALL__') {
+                            total += Object.values(snap[t]).reduce((sum, v) => sum + (v.used || 0), 0);
+                        } else {
+                            total += snap[t][selectedUniversity]?.used || 0;
+                        }
                     }
                 }
+                return total;
             }
 
-            // 기준값 대비 증가분 계산
-            const increment = currentTotal - BASELINE.value;
+            // 스냅샷을 시간대별로 그룹화
+            const grouped = {};
+            current.snapshots.forEach(snap => {
+                const snapTime = new Date(snap.time);
+                const hour = getKSTHour(snapTime);
+                const dateStr = getKSTDateStr(snapTime);
+                const key = `${dateStr}_${hour}`;
 
-            return {
-                value: Math.max(0, increment),  // 증가분 (음수 방지)
-                hour: snapshotHour,
-                date: snapshotDateStr,
-                samples: hourSnapshots.length,
-                currentTotal: currentTotal  // 디버깅용
-            };
+                if (!grouped[key]) {
+                    grouped[key] = { snapshots: [], hour, date: dateStr };
+                }
+                grouped[key].snapshots.push(snap);
+            });
+
+            // 시간대 키를 정렬 (시간순)
+            const sortedKeys = Object.keys(grouped).sort((a, b) => {
+                const [dateA, hourA] = a.split('_');
+                const [dateB, hourB] = b.split('_');
+                if (dateA !== dateB) return dateA.localeCompare(dateB);
+                return parseInt(hourA) - parseInt(hourB);
+            });
+
+            const hourlyData = {};
+            let prevTotal = BASELINE.value; // 첫 시간대는 BASELINE 기준
+
+            for (const key of sortedKeys) {
+                const data = grouped[key];
+
+                // 기준 시점 이후가 아니면 스킵 (하지만 prevTotal은 업데이트)
+                const finalSnap = data.snapshots[data.snapshots.length - 1];
+                const currentTotal = getTotal(finalSnap);
+
+                if (!isAfterBaseline(data.date, data.hour)) {
+                    prevTotal = currentTotal;
+                    continue;
+                }
+
+                // 해당 시간대의 증가분 = 현재 - 이전
+                const increment = currentTotal - prevTotal;
+
+                hourlyData[key] = {
+                    value: Math.max(0, increment),
+                    hour: data.hour,
+                    date: data.date,
+                    samples: data.snapshots.length,
+                    currentTotal: currentTotal,
+                    prevTotal: prevTotal
+                };
+
+                prevTotal = currentTotal;
+            }
+
+            return hourlyData;
         }
 
         // 히트맵 렌더링 (X축: 날짜, Y축: 시간)
@@ -313,8 +339,8 @@
             const dates = getAvailableDates();
             const hours = Array.from({ length: 24 }, (_, i) => `${23 - i}:00`);
 
-            // 현재 시간대 실시간 값
-            const currentHourData = getCurrentHourValue(currentData);
+            // 모든 시간대별 실시간 값 (current.json에서)
+            const allHourValues = getAllHourValues(currentData);
 
             // 대학교 목록 추출
             const universities = getUniversitiesFromAllData(allData, selectedType);
@@ -330,12 +356,11 @@
                 for (let hourIdx = 0; hourIdx < 24; hourIdx++) {
                     let value = 0;
                     const actualHour = 23 - hourIdx; // 0시가 위로 가도록 역순
+                    const hourKey = `${dateStr}_${actualHour}`;
 
-                    // 현재 시간대면 실시간 데이터 사용
-                    if (currentHourData &&
-                        currentHourData.date === dateStr &&
-                        currentHourData.hour === actualHour) {
-                        value = currentHourData.value;
+                    // current.json에 해당 시간대 데이터가 있으면 사용
+                    if (allHourValues[hourKey]) {
+                        value = allHourValues[hourKey].value;
                     } else if (data && data.hours) {
                         // daily 집계 데이터 사용
                         const hourData = data.hours.find(h => h.hour === actualHour);
@@ -380,12 +405,11 @@
                         const hour = 23 - params.data[1]; // 역순 보정
                         const value = params.data[2];
                         const label = selectedUniversity === '__ALL__' ? '전체' : selectedUniversity;
-                        // 현재 시간대 실시간 데이터인지 확인
-                        const isLive = currentHourData &&
-                                       currentHourData.date === date &&
-                                       currentHourData.hour === hour;
+                        // current.json의 실시간 데이터인지 확인
+                        const hourKey = `${date}_${hour}`;
+                        const isLive = allHourValues[hourKey] !== undefined;
                         const liveTag = isLive ? '<span style="color:#48bb78;">(실시간)</span> ' : '';
-                        return `<strong>${label}</strong><br/>${date} ${hour}:00 ${liveTag}<br/>사용: ${value}개`;
+                        return `<strong>${label}</strong><br/>${date} ${hour}:00 ${liveTag}<br/>증가: +${value}개`;
                     }
                 },
                 grid: {
