@@ -35,7 +35,13 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "chore: collect snapshot $(date -u +%Y-%m-%dT%H:%M)"
-            # 원격에 새 커밋이 있을 수 있으므로 pull --rebase 후 push
-            git pull --rebase origin main || true
+
+            # pull 시도, 충돌 발생하면 스킵
+            if ! git pull --rebase origin main; then
+              echo "Rebase conflict detected, aborting and skipping this run"
+              git rebase --abort || true
+              exit 0
+            fi
+
             git push
           fi
