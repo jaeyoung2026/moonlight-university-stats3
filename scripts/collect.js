@@ -265,9 +265,12 @@ function saveCurrent(data) {
     fs.writeFileSync(CURRENT_FILE, JSON.stringify(data, null, 2));
 }
 
-// daily 파일에 시간별 집계 추가
-function addHourlyAggregate(snapshots, hour, date) {
-    const dateStr = date.toISOString().slice(0, 10);
+// daily 파일에 현재 스냅샷 기준으로 시간별 데이터 업데이트
+// 단일 스냅샷으로 해당 시간 데이터를 즉시 업데이트 (avg = 현재값)
+function updateDailyWithSnapshot(snapshot) {
+    const snapTime = new Date(snapshot.time);
+    const hour = getKSTHour(snapTime);
+    const dateStr = getKSTDateStr(snapTime);
     const dailyFile = path.join(DAILY_DIR, `${dateStr}.json`);
 
     // 기존 daily 파일 로드 또는 새로 생성
@@ -278,70 +281,39 @@ function addHourlyAggregate(snapshots, hour, date) {
         dailyData = { date: dateStr, hours: [] };
     }
 
-    // 해당 시간대 스냅샷 필터링 (KST 기준)
-    const hourSnapshots = snapshots.filter(s => {
-        const snapTime = new Date(s.time);
-        return getKSTHour(snapTime) === hour && getKSTDateStr(snapTime) === dateStr;
-    });
-
-    if (hourSnapshots.length === 0) {
-        console.log(`No snapshots for hour ${hour}`);
-        return;
-    }
-
-    // 시간별 집계 계산
+    // 시간별 집계 계산 (현재 스냅샷 값 사용)
     const groupAgg = {};
     const personalAgg = {};
 
-    // 모든 학교 목록 수집
-    const allGroupUnis = new Set();
-    const allPersonalUnis = new Set();
-
-    for (const snap of hourSnapshots) {
-        Object.keys(snap.group || {}).forEach(u => allGroupUnis.add(u));
-        Object.keys(snap.personal || {}).forEach(u => allPersonalUnis.add(u));
+    // 단체 쿠폰
+    for (const [uni, data] of Object.entries(snapshot.group || {})) {
+        groupAgg[uni] = {
+            avg: data.used,
+            min: data.used,
+            max: data.used
+        };
     }
 
-    // 단체 쿠폰 집계
-    for (const uni of allGroupUnis) {
-        const values = hourSnapshots
-            .map(s => s.group[uni]?.used)
-            .filter(v => v !== undefined);
-
-        if (values.length > 0) {
-            groupAgg[uni] = {
-                avg: values.reduce((a, b) => a + b, 0) / values.length,
-                min: Math.min(...values),
-                max: Math.max(...values)
-            };
-        }
-    }
-
-    // 개인 쿠폰 집계
-    for (const uni of allPersonalUnis) {
-        const values = hourSnapshots
-            .map(s => s.personal[uni]?.used)
-            .filter(v => v !== undefined);
-
-        if (values.length > 0) {
-            personalAgg[uni] = {
-                avg: values.reduce((a, b) => a + b, 0) / values.length,
-                min: Math.min(...values),
-                max: Math.max(...values)
-            };
-        }
+    // 개인 쿠폰
+    for (const [uni, data] of Object.entries(snapshot.personal || {})) {
+        personalAgg[uni] = {
+            avg: data.used,
+            min: data.used,
+            max: data.used
+        };
     }
 
     // 기존 시간 데이터 업데이트 또는 추가
     const existingIdx = dailyData.hours.findIndex(h => h.hour === hour);
     const hourData = {
         hour,
-        samples: hourSnapshots.length,
+        samples: 1,
         group: groupAgg,
         personal: personalAgg
     };
 
     if (existingIdx >= 0) {
+        // 기존 데이터가 있으면 업데이트 (최신값으로 덮어쓰기)
         dailyData.hours[existingIdx] = hourData;
     } else {
         dailyData.hours.push(hourData);
@@ -349,7 +321,7 @@ function addHourlyAggregate(snapshots, hour, date) {
     }
 
     fs.writeFileSync(dailyFile, JSON.stringify(dailyData, null, 2));
-    console.log(`Updated daily file: ${dateStr}, hour: ${hour}, samples: ${hourSnapshots.length}`);
+    console.log(`Updated daily file: ${dateStr}, hour: ${hour}`);
 }
 
 // 30일 초과 daily 파일 삭제
@@ -388,7 +360,7 @@ async function main() {
         const current = loadCurrent();
         current.snapshots.push(snapshot);
 
-        // 60개 초과 시 오래된 것 제거 (FIFO)
+        // MAX_SNAPSHOTS 초과 시 오래된 것 제거 (FIFO)
         while (current.snapshots.length > MAX_SNAPSHOTS) {
             current.snapshots.shift();
         }
@@ -397,21 +369,11 @@ async function main() {
         saveCurrent(current);
         console.log(`Saved snapshot. Total: ${current.snapshots.length}`);
 
-        // 3. 0~4분 사이일 때 이전 시간 데이터를 daily에 머지
-        // (GitHub Actions 지연 대비: 정각에 실행 안되어도 0~4분 사이면 집계)
-        if (currentMinute < 5 && current.snapshots.length > 0) {
-            // 이전 시간(현재 시간 - 1)의 스냅샷을 집계 (KST 기준)
-            const prevHour = (currentHour + 23) % 24;
-            // KST 기준 이전 날짜 계산
-            const kstNow = toKST(now);
-            const prevDate = new Date(kstNow);
-            if (currentHour === 0) {
-                prevDate.setUTCDate(prevDate.getUTCDate() - 1);
-            }
+        // 3. 매 실행마다 현재 시간 데이터를 daily에 업데이트
+        updateDailyWithSnapshot(snapshot);
 
-            addHourlyAggregate(current.snapshots, prevHour, prevDate);
-
-            // 30일 초과 파일 정리
+        // 4. 정각 직후(0~4분)에 30일 초과 파일 정리
+        if (currentMinute < 5) {
             cleanupOldDailyFiles();
         }
 

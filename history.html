@@ -241,9 +241,9 @@
 
         // 기준 시점: 2025-12-15 15시까지의 누적값
         const BASELINE = {
-            date: '2025-12-15',
-            hour: 15,
-            value: 130  // 15시까지의 누적 사용량
+            date: '2025-12-16',
+            hour: 13,
+            value: 151  // 14시부터 데이터 수집 시작, 13시까지의 누적 사용량
         };
 
         // 기준 시점 이후인지 확인
@@ -256,7 +256,8 @@
         // current.json에서 모든 시간대별 실시간 값 계산
         // 각 시간대의 증가분 = 해당 시간 마지막 스냅샷 - 이전 시간 마지막 스냅샷
         // 반환: { 'YYYY-MM-DD_HH': { value, hour, date, ... }, ... }
-        function getAllHourValues(current) {
+        // allData: daily 데이터 (이전 시간 누적값 참조용)
+        function getAllHourValues(current, allData) {
             if (!current || !current.snapshots || current.snapshots.length === 0) {
                 return {};
             }
@@ -301,7 +302,7 @@
             });
 
             const hourlyData = {};
-            let prevTotal = BASELINE.value; // 첫 시간대는 BASELINE 기준
+            let prevTotal = null; // 첫 시간대는 daily 데이터에서 가져옴
 
             for (const key of sortedKeys) {
                 const data = grouped[key];
@@ -313,6 +314,11 @@
                 if (!isAfterBaseline(data.date, data.hour)) {
                     prevTotal = currentTotal;
                     continue;
+                }
+
+                // 첫 시간대면 daily 데이터에서 이전 시간 누적값 가져오기
+                if (prevTotal === null) {
+                    prevTotal = getPrevHourValue(allData, data.date, data.hour);
                 }
 
                 // 해당 시간대의 증가분 = 현재 - 이전
@@ -333,14 +339,68 @@
             return hourlyData;
         }
 
+        // daily 데이터에서 특정 시간의 누적값 가져오기
+        function getDailyHourValue(allData, dateStr, hour) {
+            const data = allData[dateStr];
+            if (!data || !data.hours) return null; // 데이터 없음을 구분하기 위해 null 반환
+
+            const hourData = data.hours.find(h => h.hour === hour);
+            if (!hourData) return null;
+
+            const types = selectedType === 'all' ? ['group', 'personal'] : [selectedType];
+            let value = 0;
+            for (const t of types) {
+                if (hourData[t]) {
+                    if (selectedUniversity === '__ALL__') {
+                        value += Object.values(hourData[t]).reduce((sum, v) => sum + (v.avg || 0), 0);
+                    } else {
+                        value += hourData[t][selectedUniversity]?.avg || 0;
+                    }
+                }
+            }
+            return value;
+        }
+
+        // 이전 시간의 누적값 가져오기 (베이스라인 적용)
+        function getPrevHourValue(allData, dateStr, hour) {
+            // 기준 시점 이전이면 베이스라인 반환
+            if (dateStr < BASELINE.date || (dateStr === BASELINE.date && hour <= BASELINE.hour)) {
+                return selectedUniversity === '__ALL__' ? BASELINE.value : 0;
+            }
+
+            // 이전 시간 계산
+            let prevDate = dateStr;
+            let prevHour = hour - 1;
+
+            if (prevHour < 0) {
+                // 전날 23시
+                const d = new Date(dateStr);
+                d.setDate(d.getDate() - 1);
+                prevDate = d.toISOString().slice(0, 10);
+                prevHour = 23;
+            }
+
+            // 이전 시간이 베이스라인 시점이면 베이스라인 값 반환
+            if (prevDate < BASELINE.date || (prevDate === BASELINE.date && prevHour <= BASELINE.hour)) {
+                return selectedUniversity === '__ALL__' ? BASELINE.value : 0;
+            }
+
+            const prevValue = getDailyHourValue(allData, prevDate, prevHour);
+            // 이전 시간 데이터가 없으면 재귀적으로 그 이전 시간 찾기
+            if (prevValue === null) {
+                return getPrevHourValue(allData, prevDate, prevHour);
+            }
+            return prevValue;
+        }
+
         // 히트맵 렌더링 (X축: 날짜, Y축: 시간)
         async function renderHeatmap() {
             const allData = await loadAllDailyData();
             const dates = getAvailableDates();
             const hours = Array.from({ length: 24 }, (_, i) => `${23 - i}:00`);
 
-            // 모든 시간대별 실시간 값 (current.json에서)
-            const allHourValues = getAllHourValues(currentData);
+            // 모든 시간대별 실시간 값 (current.json에서, daily 데이터 참조)
+            const allHourValues = getAllHourValues(currentData, allData);
 
             // 대학교 목록 추출
             const universities = getUniversitiesFromAllData(allData, selectedType);
@@ -351,32 +411,25 @@
 
             for (let dateIdx = 0; dateIdx < dates.length; dateIdx++) {
                 const dateStr = dates[dateIdx];
-                const data = allData[dateStr];
 
                 for (let hourIdx = 0; hourIdx < 24; hourIdx++) {
                     let value = 0;
                     const actualHour = 23 - hourIdx; // 0시가 위로 가도록 역순
                     const hourKey = `${dateStr}_${actualHour}`;
 
-                    // current.json에 해당 시간대 데이터가 있으면 사용
+                    // current.json에 해당 시간대 데이터가 있으면 사용 (이미 증가분 계산됨)
                     if (allHourValues[hourKey]) {
                         value = allHourValues[hourKey].value;
-                    } else if (data && data.hours) {
-                        // daily 집계 데이터 사용
-                        const hourData = data.hours.find(h => h.hour === actualHour);
-                        if (hourData) {
-                            // type에 따라 데이터 합산
-                            const types = selectedType === 'all' ? ['group', 'personal'] : [selectedType];
-                            for (const t of types) {
-                                if (hourData[t]) {
-                                    if (selectedUniversity === '__ALL__') {
-                                        // 전체: 모든 대학교 합계
-                                        value += Object.values(hourData[t]).reduce((sum, v) => sum + (v.avg || 0), 0);
-                                    } else {
-                                        value += hourData[t][selectedUniversity]?.avg || 0;
-                                    }
-                                }
-                            }
+                    } else {
+                        // daily 데이터에서 증가분 계산 (현재 시간 누적 - 이전 시간 누적)
+                        const currentValue = getDailyHourValue(allData, dateStr, actualHour);
+
+                        if (currentValue !== null && currentValue > 0) {
+                            const prevValue = getPrevHourValue(allData, dateStr, actualHour);
+                            value = currentValue - prevValue;
+
+                            // 음수 방지 (데이터 누락 시)
+                            if (value < 0) value = 0;
                         }
                     }
 
