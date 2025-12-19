@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl:*)",
+      "Bash(node scripts/collect.js:*)",
+      "Bash(cat:*)",
+      "Bash(git push)",
+      "Bash(git pull:*)",
+      "Bash(node -e:*)",
+      "Bash(node test-debug.js:*)"
+    ]
+  }
+}
